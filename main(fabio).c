@@ -1,3 +1,10 @@
+//update a 28/10/2017, nome diferente para no apagar o que cá estava.
+//Não tem o server, já vai buscar os valores ao config, cria o numero de threads apresentadas no config.
+//Processos em comentário.
+//Não tem a parte do server.
+
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
