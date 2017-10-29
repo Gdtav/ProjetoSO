@@ -1,10 +1,3 @@
-//update a 28/10/2017, nome diferente para no apagar o que cá estava.
-//Não tem o server, já vai buscar os valores ao config, cria o numero de threads apresentadas no config.
-//Processos em comentário.
-//Não tem a parte do server.
-
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -12,7 +5,7 @@
 #include <sys/wait.h>
 #include <pthread.h>
 #include <string.h>
-
+#include <time.h>
 
 int num_doctors,num_triage,mq_max,shift_length,triaged_pacients=0;
 pthread_cond_t triage_threshold_cv = PTHREAD_COND_INITIALIZER;
@@ -37,6 +30,17 @@ typedef struct thread_stuff{
     Queue *queue;
     int thread_number;
 }Stuff;
+
+void doctor(){
+    time_t time1 = time(NULL);
+    time_t time2,time3;
+    printf("I'm doctor %d, and I will begin my shift.\n",getpid());
+    do{
+	time2 = time(NULL);
+        time3 = difftime(time2,time1);
+    }while(time3<shift_length);
+    printf("I'm doctor %d, and I will end my shift.\n",getpid());
+}
 
 void getconfig(FILE* cfg){
     char linha[50];
@@ -71,11 +75,12 @@ void* triage(void *t){
 
 int main() {
     int i;
-    int n=num_doctors;
+    int status;
     pid_t new_doctor;
     Queue queue = malloc(sizeof(Queue));
     FILE *cfg = fopen("config.txt","r");
     getconfig(cfg);
+    int n=num_doctors;
     Stuff thread[num_triage];
     int *n_threads = (int*) malloc(sizeof(int));
     pthread_t threads[num_triage];
@@ -85,12 +90,19 @@ int main() {
 	    thread[i].thread_number = i;
 	    pthread_create(&threads[i],NULL,triage,(void*)&thread[i]);
 	}
-	/*while(n>0){
+	while(n>0){
 	    new_doctor = fork();
 	    n--;
-	}*/
+	    if(new_doctor==0){
+	    doctor();
+	    exit(0);
+	    }
+	}
 	for(i=0;i<num_triage;i++){
 	    pthread_join(threads[i],NULL);
+	}
+	for(i=0;i<num_doctors;i++){
+	    wait(&status);
 	}
 	
     } else {
