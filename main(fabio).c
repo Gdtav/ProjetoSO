@@ -1,3 +1,7 @@
+//update a 29/10/2017, nome diferente para não apagar o que cá estava.
+// Busca dados ao Config, threads e processos (com shift_lenght) funcionais.
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
