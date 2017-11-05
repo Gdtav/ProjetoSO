@@ -53,7 +53,7 @@ int main() {
     FILE *cfg = fopen("config.txt","r");
     getconfig(cfg);
     int n=num_doctors;
-    Stuff thread[num_triage];
+    Thread thread[num_triage];
     pthread_t threads[num_triage];
     if (cfg) {
 	for(i=0;i<num_triage;i++){

@@ -8,14 +8,6 @@
 //Variaveis Globais
 int num_doctors, num_triage, mq_max, shift_length, triaged_pacients = 0;
 
-//Fila de Pacientes
-typedef struct queue * Queue;
-
-typedef struct queue{
-    Pacient* pacient;
-    Queue next;
-} Queue_node;
-
 //Paciente
 typedef struct pacient{
     int arrival_number;
@@ -24,6 +16,14 @@ typedef struct pacient{
     int priority;
     int attendance_time;
 } Pacient;
+
+//Fila de Pacientes
+typedef struct queue * Queue;
+
+typedef struct queue{
+    Pacient* pacient;
+    Queue next;
+} Queue_node;
 
 //Dados de uma Thread
 typedef struct thread_data{
