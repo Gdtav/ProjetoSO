@@ -1,5 +1,5 @@
 CC	= gcc
-OBJS	= main.o doctors.o
+OBJS	= main.o 
 PROG	= triage
 
 # GENERIC 
@@ -13,10 +13,8 @@ ${PROG}:	${OBJS}
 		${CC} -Wall -pthread ${OBJS} -o $@
 
 .c.o:
-		${CC} $< -c -o $@
+		${CC} -Wall -pthread $< -c -o $@
 
 ##############################
 
 main.o:	main.c structs.h
-
-doctors.o: doctors.c doctors.h

@@ -6,7 +6,7 @@
 #define PROJETOSO_STRUCTS_H
 
 //Variaveis Globais
-int num_doctors, num_triage, mq_max, shift_length, triaged_pacients = 0;
+int num_doctors, num_triage, mq_max, triaged_pacients, shift_length = 0;;
 
 //Paciente
 typedef struct pacient{
@@ -30,5 +30,7 @@ typedef struct thread_data{
     Queue *queue;
     int thread_number;
 } Thread;
+
+void doctor();
 
 #endif //PROJETOSO_STRUCTS_H

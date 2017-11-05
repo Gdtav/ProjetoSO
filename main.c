@@ -9,7 +9,6 @@
 #include <pthread.h>
 #include <string.h>
 #include <time.h>
-#include "doctors.h"
 #include "structs.h"
 
 pthread_cond_t triage_threshold_cv = PTHREAD_COND_INITIALIZER;
@@ -43,6 +42,17 @@ void* triage(void *t){
 
     printf("Thread %d is leaving! Pacients triaged: %d\n",data->thread_number,triaged_pacients);
     pthread_exit(NULL);
+}
+
+void doctor(){
+    time_t time1 = time(NULL);
+    time_t time2,time3;
+    printf("I'm doctor %d, and I will begin my shift.\n",getpid());
+    do{
+    time2 = time(NULL);
+        time3 = difftime(time2,time1);
+    } while(time3<shift_length);
+    printf("I'm doctor %d, and I will end my shift.\n",getpid());
 }
 
 int main() {
