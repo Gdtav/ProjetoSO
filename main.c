@@ -1,7 +1,6 @@
 //update a 29/10/2017, nome diferente para não apagar o que cá estava.
 // Busca dados ao Config, threads e processos (com shift_lenght) funcionais.
 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -10,41 +9,11 @@
 #include <pthread.h>
 #include <string.h>
 #include <time.h>
+#include "doctors.h"
+#include "structs.h"
 
-int num_doctors,num_triage,mq_max,shift_length,triaged_pacients=0;
 pthread_cond_t triage_threshold_cv = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t triage_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-typedef struct queue * Queue;
-
-typedef struct pacient{
-    int arrival_number;
-    char name[50];
-    int triage_time;
-    int priority;
-    int attendance_time;
-}Pacient;
-
-typedef struct queue{
-    Pacient* pacient;
-    Queue next;
-}Queue_node;
-
-typedef struct thread_stuff{
-    Queue *queue;
-    int thread_number;
-}Stuff;
-
-void doctor(){
-    time_t time1 = time(NULL);
-    time_t time2,time3;
-    printf("I'm doctor %d, and I will begin my shift.\n",getpid());
-    do{
-	time2 = time(NULL);
-        time3 = difftime(time2,time1);
-    }while(time3<shift_length);
-    printf("I'm doctor %d, and I will end my shift.\n",getpid());
-}
 
 void getconfig(FILE* cfg){
     char linha[50];
@@ -65,7 +34,7 @@ void getconfig(FILE* cfg){
 }        
 
 void* triage(void *t){
-    Stuff *data = (Stuff*)t;
+    Thread *data = (Thread *)t;
 
     printf("Thread %d is starting!\n",data->thread_number);
     pthread_mutex_lock(&triage_mutex);
@@ -75,7 +44,6 @@ void* triage(void *t){
     printf("Thread %d is leaving! Pacients triaged: %d\n",data->thread_number,triaged_pacients);
     pthread_exit(NULL);
 }
-
 
 int main() {
     int i;
