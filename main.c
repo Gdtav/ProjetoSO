@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include <string.h>
 #include <time.h>
+#include <sys/shm.h>
 #include "structs.h"
 
 pthread_cond_t triage_threshold_cv = PTHREAD_COND_INITIALIZER;
@@ -37,45 +38,55 @@ void* triage(void *t){
 
     printf("Thread %d is starting!\n",data->thread_number);
     pthread_mutex_lock(&triage_mutex);
-    triaged_pacients++;
+    data->stats->triaged_patients++;
     pthread_mutex_unlock(&triage_mutex);
 
-    printf("Thread %d is leaving! Pacients triaged: %d\n",data->thread_number,triaged_pacients);
+    printf("Thread %d is leaving! Pacients triaged: %d\n",data->thread_number,data->stats->triaged_patients);
     pthread_exit(NULL);
 }
 
-void doctor(){
+void doctor(Stats *stats){
     time_t time1 = time(NULL);
     time_t time2,time3;
     printf("I'm doctor %d, and I will begin my shift.\n",getpid());
     do{
-    time2 = time(NULL);
+    	time2 = time(NULL);
+    	/*for (i = 0; i < Patients; ++i)
+    	{
+    		//process Patient
+    		stats->attended_patients++;
+    	}*/
         time3 = difftime(time2,time1);
     } while(time3<shift_length);
-    printf("I'm doctor %d, and I will end my shift.\n",getpid());
+    printf("I'm doctor %d, and I will end my shift.\n Patients attended: %d \n",getpid(),stats->attended_patients);
 }
 
 int main() {
+	//Inicializacao de variaveis e estruturas
     int i;
     int status;
     pid_t new_doctor;
     Queue queue = malloc(sizeof(Queue));
+    int mem_id = shmget(IPC_PRIVATE,sizeof(Stats),IPC_CREAT | 0777);
+    Stats *stats = shmat(mem_id,NULL,0);
     FILE *cfg = fopen("config.txt","r");
     getconfig(cfg);
     int n=num_doctors;
     Thread thread[num_triage];
-    pthread_t threads[num_triage];
+    pthread_t threads[num_triage]; //pool de threads
     if (cfg) {
 	for(i=0;i<num_triage;i++){
 	    thread[i].queue = &queue;
 	    thread[i].thread_number = i;
+	    thread[i].stats = stats;
 	    pthread_create(&threads[i],NULL,triage,(void*)&thread[i]);
 	}
+	//criacao dos processos doutor
 	while(n>0){
 	    new_doctor = fork();
 	    n--;
 	    if(new_doctor==0){
-	    doctor();
+	    doctor(stats);
 	    exit(0);
 	    }
 	}

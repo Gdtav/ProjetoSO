@@ -6,22 +6,30 @@
 #define PROJETOSO_STRUCTS_H
 
 //Variaveis Globais
-int num_doctors, num_triage, mq_max, triaged_pacients, shift_length = 0;;
+int num_doctors, num_triage, mq_max, shift_length = 0;;
+
+typedef struct {
+	int triaged_patients;
+	int attended_patients;
+	float mean_triage_wait;
+	float mean_attendance_time;
+	float mean_total_time;
+} Stats;
 
 //Paciente
-typedef struct pacient{
+typedef struct patient{
     int arrival_number;
     char name[50];
     int triage_time;
     int priority;
     int attendance_time;
-} Pacient;
+} Patient;
 
 //Fila de Pacientes
 typedef struct queue * Queue;
 
 typedef struct queue{
-    Pacient* pacient;
+    Patient* patient;
     Queue next;
 } Queue_node;
 
@@ -29,6 +37,7 @@ typedef struct queue{
 typedef struct thread_data{
     Queue *queue;
     int thread_number;
+    Stats *stats;
 } Thread;
 
 void doctor();
