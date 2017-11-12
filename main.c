@@ -48,28 +48,37 @@ void* triage(void *t){
     Thread *data = (Thread *)t;
 
     printf("Thread %d is starting!\n",data->thread_number);
-    pthread_mutex_lock(&triage_mutex);
-    data->stats->triaged_patients++;
-    pthread_mutex_unlock(&triage_mutex);
+    while(1){
+        pthread_mutex_lock(&triage_mutex);
+        data->stats->triaged_patients++;
+        printf("patients triaged: %d\n", data->stats->triaged_patients);
+        pthread_mutex_unlock(&triage_mutex);
+        sleep(4);
+    }
+    
 
-    printf("Thread %d is leaving! Pacients triaged: %d\n",data->thread_number,data->stats->triaged_patients);
-    pthread_exit(NULL);
+    //printf("Thread %d is leaving! Pacients triaged: %d\n",data->thread_number,data->stats->triaged_patients);
+    //pthread_exit(NULL);
+}
+
+void temp_doctor(Stats* stats){
+    printf("Temporary doctor entering\n");
+    while(stats->triaged_patients - stats->attended_patients > 0.8 * mq_max)
+        stats->attended_patients++;
+    printf("Temporary doctor leaving. Patients attended: %d \n", stats->attended_patients);
 }
 
 void doctor(Stats *stats){
-    time_t time1 = time(NULL);
-    time_t time2,time3;
+    //time_t time1 = time(NULL);
+    //time_t time2,time3;
+    clock_t time_;
     printf("I'm doctor %d, and I will begin my shift.\n",getpid());
+    time_ = clock();
     do{
-    	time2 = time(NULL);
-    	/*for (i = 0; i < Patients; ++i)
-    	{
-    		//process Patient
-    		stats->attended_patients++;
-    	}*/
-        time3 = difftime(time2,time1);
-    } while(time3<shift_length);
-    stats->attended_patients++;
+    	//something
+    } while((clock() - time_)/CLOCKS_PER_SEC < shift_length);
+    if(stats->triaged_patients > stats->attended_patients)
+        stats->attended_patients++;
     printf("I'm doctor %d, and I will end my shift.\n Patients attended: %d \n",getpid(),stats->attended_patients);
 }
 
@@ -87,14 +96,14 @@ int main() {
     Thread thread[num_triage];
     pthread_t threads[num_triage]; //pool de threads
     if (cfg) {
+        for(i=0;i<num_triage;i++){
+            thread[i].queue = &queue;
+            thread[i].thread_number = i;
+            thread[i].stats = stats;
+            pthread_create(&threads[i],NULL,triage,(void*)&thread[i]);
+        }
         while (1) {
             n=num_doctors;
-            for(i=0;i<num_triage;i++){
-                thread[i].queue = &queue;
-                thread[i].thread_number = i;
-                thread[i].stats = stats;
-                pthread_create(&threads[i],NULL,triage,(void*)&thread[i]);
-            }
             //criacao dos processos doutor
             while(n>0){
                 new_doctor = fork();
@@ -103,10 +112,13 @@ int main() {
                 doctor(stats);
                 exit(0);
                 }
+                if(stats->triaged_patients - stats->attended_patients > mq_max)
+                temp_doctor(stats);
             }
-            for(i=0;i<num_triage;i++){
+            
+            /*for(i=0;i<num_triage;i++){
                 pthread_join(threads[i],NULL);
-            }
+            }*/
             for(i=0;i<num_doctors;i++){
                 wait(&status);
             }
