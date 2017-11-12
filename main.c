@@ -10,10 +10,21 @@
 #include <string.h>
 #include <time.h>
 #include <sys/shm.h>
+#include <signal.h>
 #include "structs.h"
 
 pthread_cond_t triage_threshold_cv = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t triage_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void handler(int signum){
+    if (signum == SIGINT){
+        printf("A eliminar todos os processos e threads...\n");
+        kill(0,signum);
+        pthread_kill(pthread_self(),signum);
+        printf("Tudo eliminado! A sair...\n");
+        exit(0);
+    }
+}
 
 void getconfig(FILE* cfg){
     char linha[50];
@@ -58,12 +69,14 @@ void doctor(Stats *stats){
     	}*/
         time3 = difftime(time2,time1);
     } while(time3<shift_length);
+    stats->attended_patients++;
     printf("I'm doctor %d, and I will end my shift.\n Patients attended: %d \n",getpid(),stats->attended_patients);
 }
 
 int main() {
 	//Inicializacao de variaveis e estruturas
-    int i;
+    signal(SIGINT, handler);
+    int i, n;
     int status;
     pid_t new_doctor;
     Queue queue = malloc(sizeof(Queue));
@@ -71,32 +84,33 @@ int main() {
     Stats *stats = shmat(mem_id,NULL,0);
     FILE *cfg = fopen("config.txt","r");
     getconfig(cfg);
-    int n=num_doctors;
     Thread thread[num_triage];
     pthread_t threads[num_triage]; //pool de threads
     if (cfg) {
-	for(i=0;i<num_triage;i++){
-	    thread[i].queue = &queue;
-	    thread[i].thread_number = i;
-	    thread[i].stats = stats;
-	    pthread_create(&threads[i],NULL,triage,(void*)&thread[i]);
-	}
-	//criacao dos processos doutor
-	while(n>0){
-	    new_doctor = fork();
-	    n--;
-	    if(new_doctor==0){
-	    doctor(stats);
-	    exit(0);
-	    }
-	}
-	for(i=0;i<num_triage;i++){
-	    pthread_join(threads[i],NULL);
-	}
-	for(i=0;i<num_doctors;i++){
-	    wait(&status);
-	}
-	
+        while (1) {
+            n=num_doctors;
+            for(i=0;i<num_triage;i++){
+                thread[i].queue = &queue;
+                thread[i].thread_number = i;
+                thread[i].stats = stats;
+                pthread_create(&threads[i],NULL,triage,(void*)&thread[i]);
+            }
+            //criacao dos processos doutor
+            while(n>0){
+                new_doctor = fork();
+                n--;
+                if(new_doctor==0){
+                doctor(stats);
+                exit(0);
+                }
+            }
+            for(i=0;i<num_triage;i++){
+                pthread_join(threads[i],NULL);
+            }
+            for(i=0;i<num_doctors;i++){
+                wait(&status);
+            }
+        }
     } else {
         printf("Config file not accessible. Exiting...");
         return 1;
