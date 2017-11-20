@@ -10,8 +10,11 @@
 #include <string.h>
 #include <time.h>
 #include <sys/shm.h>
+#include <sys/msg.h>
+#include <sys/mman.h>
 #include <signal.h>
 #include "structs.h"
+#include <fcntl.h>
 
 pthread_cond_t triage_threshold_cv = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t triage_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -85,17 +88,22 @@ void doctor(Stats *stats){
 int main() {
 	//Inicializacao de variaveis e estruturas
     signal(SIGINT, handler);
-    int i, n;
-    int status;
+    int i, n, log_fd;
+    int status,mq_id;
     pid_t new_doctor;
     Queue queue = malloc(sizeof(Queue));
+    log_fd = open()     //VER SYSTEM CALLS PARA INICIAR LOG FILE NO LIVRO
     int mem_id = shmget(IPC_PRIVATE,sizeof(Stats),IPC_CREAT | 0777);
     Stats *stats = shmat(mem_id,NULL,0);
     FILE *cfg = fopen("config.txt","r");
-    getconfig(cfg);
-    Thread thread[num_triage];
-    pthread_t threads[num_triage]; //pool de threads
-    if (cfg) {
+    FILE *log_file = mmap(NULL,LOGSIZE,PROT_READ | PROT_WRITE);
+    //Corre o programa caso consiga abrir o ficheiro de configuracao
+    if (cfg && log_file) {
+        getconfig(cfg);
+        Thread thread[num_triage];
+        pthread_t threads[num_triage]; //pool de threads
+        //Cria message queue
+        mq_id = msgget(IPC_PRIVATE, IPC_CREAT);
         for(i=0;i<num_triage;i++){
             thread[i].queue = &queue;
             thread[i].thread_number = i;
@@ -127,5 +135,4 @@ int main() {
         printf("Config file not accessible. Exiting...");
         return 1;
     }
-    return 0;
 }

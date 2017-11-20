@@ -5,8 +5,10 @@
 #ifndef PROJETOSO_STRUCTS_H
 #define PROJETOSO_STRUCTS_H
 
+#define LOGSIZE 4096
+
 //Variaveis Globais
-int num_doctors, num_triage, mq_max, shift_length = 0;;
+int num_doctors, num_triage, mq_max, shift_length = 0;
 
 typedef struct {
 	int triaged_patients;
@@ -25,6 +27,11 @@ typedef struct patient{
     int attendance_time;
 } Patient;
 
+typedef struct {
+    long mtype;
+    Patient patient;
+} Message;
+
 //Fila de Pacientes
 typedef struct queue * Queue;
 
@@ -40,6 +47,6 @@ typedef struct thread_data{
     Stats *stats;
 } Thread;
 
-void doctor();
+void doctor(Stats *);
 
 #endif //PROJETOSO_STRUCTS_H
