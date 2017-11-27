@@ -92,12 +92,12 @@ int main() {
     int status,mq_id;
     pid_t new_doctor;
     Queue queue = malloc(sizeof(Queue));
-    log_fd = open()     //VER SYSTEM CALLS PARA INICIAR LOG FILE NO LIVRO
+    log_fd = open("urgency.log", O_RDWR,0);    //VER SYSTEM CALLS PARA INICIAR LOG FILE NO LIVRO
     int mem_id = shmget(IPC_PRIVATE,sizeof(Stats),IPC_CREAT | 0777);
     Stats *stats = shmat(mem_id,NULL,0);
     FILE *cfg = fopen("config.txt","r");
-    FILE *log_file = mmap(NULL,LOGSIZE,PROT_READ | PROT_WRITE);
-    //Corre o programa caso consiga abrir o ficheiro de configuracao
+    FILE *log_file = mmap(NULL, LOGSIZE, PROT_READ | PROT_WRITE, MAP_SHARED, log_fd, 0);
+    //Corre o programa caso consiga abrir o ficheiro de configuracao e o log
     if (cfg && log_file) {
         getconfig(cfg);
         Thread thread[num_triage];
@@ -122,13 +122,6 @@ int main() {
                 }
                 if(stats->triaged_patients - stats->attended_patients > mq_max)
                 temp_doctor(stats);
-            }
-            
-            /*for(i=0;i<num_triage;i++){
-                pthread_join(threads[i],NULL);
-            }*/
-            for(i=0;i<num_doctors;i++){
-                wait(&status);
             }
         }
     } else {
