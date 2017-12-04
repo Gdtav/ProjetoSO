@@ -1,0 +1,10 @@
+﻿Inicializar Named Pipe;
+Mapear Log File em memória
+Inicializar message queue - DONE
+criar funcao para ler do pipe -
+colocar threads a ler da fila de pacientes para a message queue
+colocar doutores a receber da message queue e processar os pacientes
+
+Duvidas:
+Escrever no log: sprintf ou write?
+Ler do pipe: strtok? Ou fscanf? 

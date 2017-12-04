@@ -1,6 +1,6 @@
 CC	= gcc
-OBJS	= main.o 
-PROG	= triage
+OBJS	= main.o doctors.o
+PROG	= urgency
 
 # GENERIC 
 
@@ -17,4 +17,6 @@ ${PROG}:	${OBJS}
 
 ##############################
 
-main.o:	main.c structs.h
+main.o:	main.c 
+
+doctors.o: doctors.c 
