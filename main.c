@@ -11,11 +11,12 @@ void* triage(void *);
 void temp_doctor();
 void doctor();
 
+void queueget(Patient *pPatient);
+
 int main() {
 	//Inicializacao de variaveis e estruturas
     signal(SIGINT, handler);
     int i, n;
-    int status;
     char str[STR_SIZE];
     pid_t new_doctor;
     Queue queue;
@@ -35,9 +36,10 @@ int main() {
             pthread_create(&threads[i],NULL,triage,(void*)&thread[i]);
         }
         while (1) {
-            read(PIPE,str,sizeof(str));
-            queue->patient = getpatient(str);
-            queue = queue->next;
+            read(PIPE,str,sizeof(str));             //DEfinir tipo de leitura caso n seja um paciente IMPORTANTE!!!!!!!!!!!!
+            queue->patient = getpatient(str);       //Falta colocar arrival time (usar time_t probably)
+            queue = queue->next;                    //Colocar funcao para inserir na fila o peciente lido
+
             n=num_doctors;
             //criacao dos processos doutor
             while(n>0){
@@ -103,6 +105,7 @@ void* triage(void *t){
     Message *msg = malloc(sizeof(Message));
     while(1){
         pthread_mutex_lock(&queue_mutex);
+        queueget(pat);
         pthread_mutex_unlock(&queue_mutex);
         msg->patient = *pat;
         msg->m_type = pat->priority;
@@ -116,6 +119,10 @@ void* triage(void *t){
 
     //printf("Thread %d is leaving! Pacients triaged: %d\n",data->thread_number,data->stats->triaged_patients);
     //pthread_exit(NULL);
+}
+
+void queueget(Patient *pPatient) {
+
 }
 
 void temp_doctor() {
