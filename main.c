@@ -22,13 +22,16 @@ int main() {
     create_queue(queue);
     mq_id = msgget(IPC_PRIVATE, IPC_CREAT);
     mem_id = shmget(IPC_PRIVATE,sizeof(Stats),IPC_CREAT | 0777);
+    sem_id = shmeget(IPC_PRIVATE,sizeof(sem_t),IPC_CREAT | 0777);
     mkfifo(PIPE,0700);
     Stats *stats = shmat(mem_id,NULL,0);
+    sem = shmat(sem_id,NULL,0);
     FILE *cfg = fopen("config.txt","r");
     getconfig(cfg);
     Thread thread[num_triage];
     pthread_t threads[num_triage]; //pool de threads
     if (cfg) {
+        sem_init(sem,1,1);
         for(i=0;i<num_triage;i++){
             thread[i].queue = &queue;
             thread[i].thread_number = i;
@@ -169,11 +172,13 @@ void doctor(){
     clock_t time_;
     printf("I'm doctor %d, and I will begin my shift.\n",getpid());
     Stats *stats = shmat(mem_id,NULL,0);
+    sem_t *semaphore = shmat(sem_id,NULL,0);
     Message *msg = malloc(sizeof(Message));
     time_ = clock();
     do{
+        sem_wait(semaphore);
         msgrcv(mq_id,msg,sizeof(msg),-10,0);
-
+        sem_post(semaphore);
     } while((clock() - time_)/CLOCKS_PER_SEC < shift_length);
     printf("I'm doctor %d, and I will end my shift.\n Patients attended: %d \n",getpid(),stats->attended_patients);
 }
