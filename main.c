@@ -10,7 +10,6 @@ void getconfig(FILE* );
 void* triage(void *);
 void temp_doctor();
 void doctor();
-
 void queueget(Patient *pPatient);
 
 int main() {
@@ -19,7 +18,8 @@ int main() {
     int i, n;
     char str[STR_SIZE];
     pid_t new_doctor;
-    Queue queue;
+    Queue *queue;
+    create_queue(queue);
     mq_id = msgget(IPC_PRIVATE, IPC_CREAT);
     mem_id = shmget(IPC_PRIVATE,sizeof(Stats),IPC_CREAT | 0777);
     mkfifo(PIPE,0700);
@@ -36,10 +36,8 @@ int main() {
             pthread_create(&threads[i],NULL,triage,(void*)&thread[i]);
         }
         while (1) {
-            read(PIPE,str,sizeof(str));             //DEfinir tipo de leitura caso n seja um paciente IMPORTANTE!!!!!!!!!!!!
-            queue->patient = getpatient(str);       //Falta colocar arrival time (usar time_t probably)
-            queue = queue->next;                    //Colocar funcao para inserir na fila o peciente lido
-
+            read(PIPE,str,sizeof(str));          
+            enqueue(queue,getpatient(str));      
             n=num_doctors;
             //criacao dos processos doutor
             while(n>0){
@@ -50,7 +48,7 @@ int main() {
                 exit(0);
                 }
                 if(stats->triaged_patients - stats->attended_patients > mq_max)
-                temp_doctor(stats);
+                    temp_doctor();
             }
         }
     } else {
@@ -101,14 +99,14 @@ void getconfig(FILE* cfg){
 void* triage(void *t){
     Thread *data = (Thread *)t;
     printf("Thread %d is starting!\n",data->thread_number);
-    Patient *pat = malloc(sizeof(Patient));
+    Patient pat;
     Message *msg = malloc(sizeof(Message));
     while(1){
         pthread_mutex_lock(&queue_mutex);
-        queueget(pat);
+        pat = dequeue(data->queue);
         pthread_mutex_unlock(&queue_mutex);
-        msg->patient = *pat;
-        msg->m_type = pat->priority;
+        msg->patient = pat;
+        msg->m_type = pat.priority;
         pthread_mutex_lock(&stats_mutex);
         msgsnd(mq_id,msg,sizeof(Message),0);
         data->stats->triaged_patients++;
@@ -121,9 +119,39 @@ void* triage(void *t){
     //pthread_exit(NULL);
 }
 
-void queueget(Patient *pPatient) {
-
+void create_queue (Queue *queue){
+    queue->front = NULL;
+    queue->rear = NULL;
 }
+
+void enqueue (Queue *queue, Patient pat){
+    q_ptr temp_ptr;
+    temp_ptr = (q_ptr) malloc (sizeof (Queue_node));
+    if (temp_ptr != NULL) {
+        temp_ptr->patient = pat;
+        temp_ptr->next = NULL;
+        if (empty_queue (queue) == 1)
+            queue->front = temp_ptr;
+        else 
+            queue->rear->next = temp_ptr;
+        queue->rear = temp_ptr; 
+    }
+}
+
+Patient dequeue (Queue *queue){
+    q_ptr temp_ptr;
+    Patient it;
+    if (empty_queue (queue) == 0) {
+        temp_ptr = queue->front;
+        it = temp_ptr->patient;
+        queue->front = queue->front->next;
+        if (empty_queue (queue) == 1)
+            queue->rear = NULL;
+        free (temp_ptr);
+        return (it); 
+    }
+}
+
 
 void temp_doctor() {
     printf("Temporary doctor entering\n");

@@ -55,12 +55,18 @@ typedef struct {
 } Message;
 
 //Fila de Pacientes
-typedef struct queue * Queue;
-
-typedef struct queue{
+typedef struct node_type {
     Patient patient;
-    Queue next;
+    struct node_type *next;
 } Queue_node;
+
+typedef Queue_node *q_ptr;
+
+typedef struct {
+    Queue_node *rear;
+    Queue_node *front;
+} Queue;
+
 
 //Dados de uma Thread
 typedef struct thread_data{
