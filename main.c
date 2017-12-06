@@ -17,13 +17,13 @@ void enqueue(Queue *, Patient);
 Patient dequeue(Queue *);
 void destroy_queue (Queue *);
 int empty_queue(Queue *);
-int full_queue (Queue *);
+//int full_queue (Queue *);
 
 int main() {
     signal(SIGINT, handler);
 	//Inicializacao de variaveis e estruturas
-    int i, n;
-    pid_t new_doctor;
+    int i;
+    pid_t new_doctor[num_doctors];
     //criacao da fila de pacientes para a triagem
     queue = malloc(sizeof(Queue_node));
     create_queue(queue);
@@ -35,53 +35,53 @@ int main() {
     //mapeamento do semaforo
     sem_id = shmget(IPC_PRIVATE,sizeof(sem_t),IPC_CREAT | 0777);
     sem = shmat(sem_id,NULL,0);
-    if ((mkfifo(PIPE, O_CREAT | O_EXCL | 0600)<0) && (errno != EEXIST)){                          //Abertura do pipe
-        printf("Cannot create pipe");
+    //Criacao do pipe
+    if ((mkfifo(PIPE, O_CREAT | O_EXCL | 0600)<0) && (errno != EEXIST)){
+        printf("Cannot create pipe\n");
         exit(0);
     } else {
-        printf("\nCriou o Pipe/Pipe já existe");
+        printf("Criou o Pipe/Pipe já existe\n");
     }
     // Opens the pipe for reading
-    if ((pipe_fd = open(PIPE, O_RDONLY)) < 0) {
-        printf("Cannot open pipe for reading");
+    if ((pipe_fd = open(PIPE, O_RDONLY | O_NONBLOCK )) < 0) {
+        printf("Nao e possivel ler do pipe\n");
         exit(0);
     } else {
-        printf("Abriu pipe para leitura");
+        printf("Abriu pipe para leitura\n");
     }
-
     FILE *cfg = fopen("config.txt","r");    //ficheiro de configuracao
-    getconfig(cfg);
-    Thread thread[num_triage];
+    Thread data;
     pthread_t threads[num_triage];          //pool de threads
     pthread_t pipe_reader;
     if (cfg) {
-        printf("\nAbriu configuração");
+        getconfig(cfg);
+        printf("Abriu configuração\n");
         sem_init(sem,1,1);
         pthread_create(&pipe_reader,NULL,piperead,(void *)queue);
-        printf("\nCriou semaforo e le o pipe");
+        printf("Criou semaforo e le o pipe\n");
+        data.queue = queue;
+        data.stats = stats;
         for(i=0;i<num_triage;i++){
-            thread[i].queue = queue;
-            thread[i].thread_number = i;
-            thread[i].stats = stats;
-            pthread_create(&threads[i],NULL,triage,(void*)&thread[i]);
+            data.thread_number = i;
+            pthread_create(&threads[i],NULL,triage,(void *)&data);
         }
-        while (1) {     
-            n=num_doctors;
+        while (1) {
             //criacao dos processos doutor
-            while(n>0){
-                new_doctor = fork();
-                n--;
-                if(new_doctor==0){
-                doctor();
-                exit(0);
+            for (i = 0; i < num_doctors; ++i) {
+                new_doctor[i] = fork();
+                if(new_doctor[i]==0){
+                    doctor();
+                    exit(0);
                 }
                 if(stats->triaged_patients - stats->attended_patients > mq_max)
                     temp_doctor();
             }
-
+            for (i = 0; i < num_doctors; ++i) {
+                wait(NULL);
+            }
         }
     } else {
-        printf("Config file not accessible. Exiting...");
+        printf("Config file not accessible. Exiting...\n");
         return -1;
     }
 }
@@ -92,6 +92,7 @@ void handler(int signum){
         printf("A eliminar todos os processos e threads...\n");
         kill(0,signum);
         pthread_kill(pthread_self(),signum);                //Falta fechar IPC's
+        destroy_queue(queue);
         printf("Tudo eliminado! A sair...\n");              //MQ, pipe, MMF, etc...
         exit(0);
     }
@@ -125,22 +126,28 @@ void getconfig(FILE* cfg){
 }
 
 
-void* triage(void *t){
-    Thread *data = (Thread *)t;
-    printf("Thread %d is starting!\n",data->thread_number);
+void* triage(void *p){
+    Thread data= *((Thread *) p);
+    printf("Thread %d is starting!\n",data.thread_number);
     Patient pat;
     Message *msg = malloc(sizeof(Message));
     while(1){
         pthread_mutex_lock(&queue_mutex);
-        pat = dequeue(data->queue);
-        pthread_mutex_unlock(&queue_mutex);
-        msg->patient = pat;
-        msg->m_type = pat.priority;
-        pthread_mutex_lock(&stats_mutex);
-        msgsnd(mq_id,msg,sizeof(Message),0);
-        data->stats->triaged_patients++;
-        printf("patients triaged: %d\n", data->stats->triaged_patients);
-        pthread_mutex_unlock(&stats_mutex);
+        if (!empty_queue(queue)) {
+            pat = dequeue(data.queue);
+            pthread_mutex_unlock(&queue_mutex);
+            msg->patient = pat;
+            msg->m_type = pat.priority;
+            msgsnd(mq_id, msg, sizeof(Message), 0);
+            pthread_mutex_lock(&stats_mutex);
+            data.stats->triaged_patients++;
+            printf("patients triaged: %d\n", data.stats->triaged_patients);
+            pthread_mutex_unlock(&stats_mutex);
+        } else{
+            pthread_mutex_unlock(&queue_mutex);
+            printf("Nao ha pacientes para enviar mensagem\n");
+            sleep(5);
+        }
     }
     
 
@@ -152,8 +159,8 @@ void *piperead(void *p){
     char str[STR_SIZE];
     while(1){
         Queue *q = (Queue *) p;
-        read(pipe_fd,str,sizeof(str));       
-        enqueue(q,getpatient(str)); 
+        if (read(pipe_fd,str,sizeof(str) > 0))  
+            enqueue(q,getpatient(str));
     }
 }
 
@@ -185,7 +192,7 @@ Patient dequeue(Queue *queue){
         queue->front = queue->front->next;
         if (empty_queue (queue) == 1)
             queue->rear = NULL;
-        free (temp_ptr);
+        free(temp_ptr);
         return (it); 
     }
 }
@@ -205,12 +212,9 @@ int empty_queue(Queue*queue) {
     return (queue->front == NULL ? 1 : 0);
 }
 
-int full_queue (Queue *queue) {
+/*int full_queue (Queue *queue) {
     return 0;
-}
-
-
-
+}*/
 
 void temp_doctor() {
     printf("Temporary doctor entering\n");

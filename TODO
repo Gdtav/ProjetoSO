@@ -1,7 +1,6 @@
 ﻿Mapear Log File em memória
-criar funcao para ler do pipe -
-colocar threads a ler da fila de pacientes para a message queue
 colocar doutores a receber da message queue e processar os pacientes
 
 Duvidas:
 Escrever no log: sprintf ou write?
+Como processar tempos de triagem e atendimento? Sleep só serve com int em segundos...
