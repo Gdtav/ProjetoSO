@@ -21,11 +21,13 @@
 #include <semaphore.h>
 
 #define PIPE "input_pipe"
+#define LOG "urgency.log"
 #define STR_SIZE 256
 
 //Variaveis Globais
 int num_doctors, num_triage, mq_max, shift_length;
 int mem_id, mq_id, sem_id;
+int pipe_fd;
 sem_t *sem;
 
 
@@ -41,13 +43,16 @@ typedef struct {
 	float mean_triage_wait;
 	float mean_attendance_time;
 	float mean_total_time;
+    float total_triage_wait;
+    float total_attendance_time;
+    float total_abs_time;
 } Stats;
 
 //Paciente
 typedef struct patient{
     int arrival_number;
     char name[50];
-    float arrival_time;
+    time_t arrival_time;
     float triage_time;
     float attendance_time;
     int priority;
@@ -71,6 +76,7 @@ typedef struct {
     Queue_node *front;
 } Queue;
 
+Queue *queue;
 
 //Dados de uma Thread
 typedef struct thread_data{

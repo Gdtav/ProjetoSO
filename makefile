@@ -1,5 +1,5 @@
 CC	= gcc
-OBJS	= main.o doctors.o
+OBJS	= main.o 
 PROG	= urgency
 
 # GENERIC 
@@ -18,5 +18,3 @@ ${PROG}:	${OBJS}
 ##############################
 
 main.o:	main.c 
-
-doctors.o: doctors.c 

@@ -8,55 +8,73 @@ void handler(int );
 Patient getpatient(char []);
 void getconfig(FILE* );
 void* triage(void *);
+void* piperead(void *);
 void temp_doctor();
 void doctor();
-void queueget(Patient *pPatient);
+void create_queue(Queue *);
+void enqueue(Queue *, Patient);
+Patient dequeue(Queue *);
+void destroy_queue (Queue *);
+int empty_queue(Queue *);
+int full_queue (Queue *);
 
 int main() {
-	//Inicializacao de variaveis e estruturas
     signal(SIGINT, handler);
+	//Inicializacao de variaveis e estruturas
     int i, n;
-    char str[STR_SIZE];
     pid_t new_doctor;
-    Queue *queue;
+    //criacao da fila de pacientes para a triagem
     create_queue(queue);
+    //criacao message queue
     mq_id = msgget(IPC_PRIVATE, IPC_CREAT);
+    //mapeamento das estatisticas
     mem_id = shmget(IPC_PRIVATE,sizeof(Stats),IPC_CREAT | 0777);
-    sem_id = shmeget(IPC_PRIVATE,sizeof(sem_t),IPC_CREAT | 0777);
-    mkfifo(PIPE,0700);
     Stats *stats = shmat(mem_id,NULL,0);
+    //mapeamento do semaforo
+    sem_id = shmget(IPC_PRIVATE,sizeof(sem_t),IPC_CREAT | 0777);
     sem = shmat(sem_id,NULL,0);
-    FILE *cfg = fopen("config.txt","r");
+    if ((mkfifo(PIPE, O_CREAT|O_EXCL|0600)<0)){                          //Abertura do pipe
+        printf("Cannot create pipe");
+        exit(0);
+    }
+    // Opens the pipe for reading
+    if ((pipe_fd = open(PIPE, O_RDONLY)) < 0) {
+        printf("Cannot open pipe for reading");
+        exit(0);
+    }
+
+    FILE *cfg = fopen("config.txt","r");    //ficheiro de configuracao
     getconfig(cfg);
     Thread thread[num_triage];
-    pthread_t threads[num_triage]; //pool de threads
+    pthread_t threads[num_triage];          //pool de threads
+    pthread_t pipe_reader;
     if (cfg) {
         sem_init(sem,1,1);
+        pthread_create(&pipe_reader,NULL,piperead,(void *)queue);
         for(i=0;i<num_triage;i++){
-            thread[i].queue = &queue;
+            thread[i].queue = queue;
             thread[i].thread_number = i;
             thread[i].stats = stats;
             pthread_create(&threads[i],NULL,triage,(void*)&thread[i]);
         }
-        while (1) {
-            read(PIPE,str,sizeof(str));          
-            enqueue(queue,getpatient(str));      
+        while (1) {     
             n=num_doctors;
             //criacao dos processos doutor
             while(n>0){
                 new_doctor = fork();
                 n--;
                 if(new_doctor==0){
-                doctor();
+                doctor(stats);
                 exit(0);
                 }
                 if(stats->triaged_patients - stats->attended_patients > mq_max)
-                    temp_doctor();
+                    temp_doctor(stats);
             }
+
         }
     } else {
         printf("Config file not accessible. Exiting...");
-        return 1;
+        return -1;
     }
     return 0;
 }
@@ -76,6 +94,7 @@ void handler(int signum){
 Patient getpatient(char str[STR_SIZE]){
     Patient pat;
     sscanf(str,"%s %f %f %d",pat.name,&pat.triage_time,&pat.attendance_time,&pat.priority);
+
     return pat;
 }
 
@@ -122,12 +141,21 @@ void* triage(void *t){
     //pthread_exit(NULL);
 }
 
-void create_queue (Queue *queue){
+void *piperead(void *p){
+    char str[STR_SIZE];
+    while(1){
+        Queue *q = (Queue *) p;
+        read(pipe_fd,str,sizeof(str));       
+        enqueue(q,getpatient(str)); 
+    }
+}
+
+void create_queue(Queue *queue){
     queue->front = NULL;
     queue->rear = NULL;
 }
 
-void enqueue (Queue *queue, Patient pat){
+void enqueue(Queue *queue, Patient pat){
     q_ptr temp_ptr;
     temp_ptr = (q_ptr) malloc (sizeof (Queue_node));
     if (temp_ptr != NULL) {
@@ -141,10 +169,10 @@ void enqueue (Queue *queue, Patient pat){
     }
 }
 
-Patient dequeue (Queue *queue){
+Patient dequeue(Queue *queue){
     q_ptr temp_ptr;
     Patient it;
-    if (empty_queue (queue) == 0) {
+    if (empty_queue(queue) == 0) {
         temp_ptr = queue->front;
         it = temp_ptr->patient;
         queue->front = queue->front->next;
@@ -155,30 +183,57 @@ Patient dequeue (Queue *queue){
     }
 }
 
+void destroy_queue (Queue *queue) {
+    q_ptr temp_ptr;
+    while (empty_queue (queue) == 0) {
+        temp_ptr = queue->front;
+        queue->front = queue->front->next;
+        free(temp_ptr);
+    }
+    queue->rear = NULL;
+}
 
-void temp_doctor() {
-    printf("Temporary doctor entering\n");
-    Stats *stats = shmat(mem_id,NULL,0);
-    while(stats->triaged_patients - stats->attended_patients > 0.8 * mq_max)
-        stats->attended_patients++;
-    printf("Temporary doctor leaving. Patients attended: %d \n", stats->attended_patients);
+
+int empty_queue(Queue*queue) {
+    return (queue->front == NULL ? 1 : 0);
+}
+
+int full_queue (Queue *queue) {
+    return 0;
 }
 
 
 
-void doctor(){
+
+void temp_doctor(Stats *stats) {
+    printf("Temporary doctor entering\n");
+    Message *msg = malloc(sizeof(Message));
+    int n_patients = 0;
+    while(stats->triaged_patients - stats->attended_patients > 0.8 * mq_max){
+        sem_wait(sem);
+        msgrcv(mq_id,msg,sizeof(msg),-10,0);
+        stats->attended_patients++;
+        sem_post(sem);
+        n_patients++;
+    }
+    printf("Temporary doctor leaving. Patients attended: %d \n", n_patients);
+}
+
+
+
+void doctor(Stats* stats){
     //time_t time1 = time(NULL);
     //time_t time2,time3;
     clock_t time_;
     printf("I'm doctor %d, and I will begin my shift.\n",getpid());
-    Stats *stats = shmat(mem_id,NULL,0);
-    sem_t *semaphore = shmat(sem_id,NULL,0);
     Message *msg = malloc(sizeof(Message));
     time_ = clock();
+    int n_patients = 0;
     do{
-        sem_wait(semaphore);
+        sem_wait(sem);
         msgrcv(mq_id,msg,sizeof(msg),-10,0);
-        sem_post(semaphore);
+        sem_post(sem);
+        n_patients++;
     } while((clock() - time_)/CLOCKS_PER_SEC < shift_length);
-    printf("I'm doctor %d, and I will end my shift.\n Patients attended: %d \n",getpid(),stats->attended_patients);
+    printf("I'm doctor %d, and I will end my shift.\n Patients attended: %d \n",getpid(),n_patients);
 }
