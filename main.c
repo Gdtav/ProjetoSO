@@ -2,6 +2,7 @@
 // Busca dados ao Config, threads e processos (com shift_lenght) funcionais.
 
 
+#include <errno.h>
 #include "structs.h"
 
 void handler(int );
@@ -24,23 +25,28 @@ int main() {
     int i, n;
     pid_t new_doctor;
     //criacao da fila de pacientes para a triagem
+    queue = malloc(sizeof(Queue_node));
     create_queue(queue);
     //criacao message queue
     mq_id = msgget(IPC_PRIVATE, IPC_CREAT);
     //mapeamento das estatisticas
     mem_id = shmget(IPC_PRIVATE,sizeof(Stats),IPC_CREAT | 0777);
-    Stats *stats = shmat(mem_id,NULL,0);
+    stats = shmat(mem_id,NULL,0);
     //mapeamento do semaforo
     sem_id = shmget(IPC_PRIVATE,sizeof(sem_t),IPC_CREAT | 0777);
     sem = shmat(sem_id,NULL,0);
-    if ((mkfifo(PIPE, O_CREAT|O_EXCL|0600)<0)){                          //Abertura do pipe
+    if ((mkfifo(PIPE, O_CREAT | O_EXCL | 0600)<0) && (errno != EEXIST)){                          //Abertura do pipe
         printf("Cannot create pipe");
         exit(0);
+    } else {
+        printf("\nCriou o Pipe/Pipe já existe");
     }
     // Opens the pipe for reading
     if ((pipe_fd = open(PIPE, O_RDONLY)) < 0) {
         printf("Cannot open pipe for reading");
         exit(0);
+    } else {
+        printf("Abriu pipe para leitura");
     }
 
     FILE *cfg = fopen("config.txt","r");    //ficheiro de configuracao
@@ -49,8 +55,10 @@ int main() {
     pthread_t threads[num_triage];          //pool de threads
     pthread_t pipe_reader;
     if (cfg) {
+        printf("\nAbriu configuração");
         sem_init(sem,1,1);
         pthread_create(&pipe_reader,NULL,piperead,(void *)queue);
+        printf("\nCriou semaforo e le o pipe");
         for(i=0;i<num_triage;i++){
             thread[i].queue = queue;
             thread[i].thread_number = i;
@@ -64,11 +72,11 @@ int main() {
                 new_doctor = fork();
                 n--;
                 if(new_doctor==0){
-                doctor(stats);
+                doctor();
                 exit(0);
                 }
                 if(stats->triaged_patients - stats->attended_patients > mq_max)
-                    temp_doctor(stats);
+                    temp_doctor();
             }
 
         }
@@ -76,7 +84,6 @@ int main() {
         printf("Config file not accessible. Exiting...");
         return -1;
     }
-    return 0;
 }
 
 
@@ -205,7 +212,7 @@ int full_queue (Queue *queue) {
 
 
 
-void temp_doctor(Stats *stats) {
+void temp_doctor() {
     printf("Temporary doctor entering\n");
     Message *msg = malloc(sizeof(Message));
     int n_patients = 0;
@@ -221,7 +228,7 @@ void temp_doctor(Stats *stats) {
 
 
 
-void doctor(Stats* stats){
+void doctor(){
     //time_t time1 = time(NULL);
     //time_t time2,time3;
     clock_t time_;

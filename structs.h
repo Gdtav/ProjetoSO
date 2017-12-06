@@ -34,7 +34,6 @@ sem_t *sem;
 pthread_cond_t triage_threshold_cv = PTHREAD_COND_INITIALIZER;  //What's this for???
 pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t stats_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t doctor_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 //Estatisticas 
 typedef struct {
@@ -47,6 +46,8 @@ typedef struct {
     float total_attendance_time;
     float total_abs_time;
 } Stats;
+
+Stats *stats;
 
 //Paciente
 typedef struct patient{
