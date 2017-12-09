@@ -20,16 +20,18 @@
 #include <fcntl.h>
 #include <semaphore.h>
 #include <errno.h>
+#include <sys/mman.h>
 
 #define PIPE "input_pipe"
 #define LOG "urgency.log"
 #define TRIAGE "TRIAGE"
 #define STR_SIZE 256
+#define LOG_SIZE 1024*1024
 
 //Variaveis Globais
 int num_doctors, num_triage, mq_max, shift_length;
 int mem_id, mq_id, sem_id;
-int pipe_fd;
+int pipe_fd, log_fd;
 sem_t *sem;
 
 
@@ -42,11 +44,11 @@ typedef struct {
 	int triaged_patients;
 	int attended_patients;
 	float mean_triage_wait;
-	float mean_attendance_time;
+	float mean_attendance_wait;
 	float mean_total_time;
     float total_triage_wait;
-    float total_attendance_time;
-    float total_abs_time;
+    float total_attendance_wait;
+    float total_time_spent;
 } Stats;
 
 Stats *stats;

@@ -43,7 +43,7 @@ int main() {
     }
     //Criacao do pipe
     if (mkfifo(PIPE, O_CREAT | 0600) < 0){
-        perror("Cannot create pipe");
+        perror("Nao e possivel criar pipe");
         exit(0);
     }
     // Opens the pipe for reading/writing
@@ -51,6 +51,12 @@ int main() {
         perror("Nao e possivel ler do pipe");
         exit(0);
     }
+    //opens log file for reading/writing
+    if ((log_fd = open(LOG,O_CREAT | O_RDWR, 0600)) == -1){
+        perror("Nao e possivel abrir o log");
+        exit(0);
+    }
+    //opens config file and reads it if successful
     FILE *cfg = fopen("config.txt","r");    //ficheiro de configuracao
     if (cfg) {
         getconfig(cfg);
@@ -61,6 +67,7 @@ int main() {
         pthread_t pipe_reader;
         pthread_create(&pipe_reader,NULL,piperead,(void *)queue);
         while (1) {
+            signal(SIGUSR1,handler);
             Thread data[num_triage];
             pthread_t threads[num_triage];      //pool de threads
             for(i=0;i<num_triage;i++){
@@ -84,7 +91,7 @@ int main() {
             }
         }
     } else {
-        printf("Config file not accessible. Exiting...\n");
+        printf("Ficheiro de configuracao nao disponivel. A sair...\n");
         return -1;
     }
 }
@@ -97,8 +104,21 @@ void handler(int signum){
         pthread_kill(pthread_self(),signum);                //Falta fechar IPC's
         destroy_queue(queue);
         sem_destroy(sem);
+        msgctl(mq_id,IPC_RMID,NULL);
+        shmdt(sem);
+        shmdt(stats);
+        close(pipe_fd);
+        munmap();
+        unlink(PIPE);
         printf("Tudo eliminado! A sair...\n");              //MQ, pipe, MMF, etc...
         exit(0);
+    }
+    else if (signum == SIGUSR1){
+        printf("Pacientes triados: %d\n",stats->triaged_patients);
+        printf("Pacientes atendidos: %d\n",stats->attended_patients);
+        printf("Tempo médio de espera para triagem: %.2f\n",stats->mean_triage_wait);
+        printf("Tempo médio de espera pelo atendimento: %.2f\n",stats->mean_attendance_wait);
+        printf("Tempo medio gasto no sistema: %.2f\n", stats->mean_total_time);
     }
 }
 
@@ -106,7 +126,7 @@ void handler(int signum){
 Patient getpatient(char str[STR_SIZE]){
     Patient pat;
     sscanf(str,"%s %f %f %d",pat.name,&pat.triage_time,&pat.attendance_time,&pat.priority);
-    if(!strcmp(pat.name,TRIAGE)) {
+    if(!strncmp(pat.name,TRIAGE,6)) {
         num_triage = (int) pat.triage_time;
     } else {
         return pat;
@@ -157,7 +177,7 @@ void* triage(void *p){
             printf("Nao ha pacientes para enviar mensagem\n");
             sleep(5);
         }
-    printf("Thread %d is leaving! Pacients triaged: %d\n",data->thread_number,data->stats->triaged_patients);
+    printf("Thread %d a sair! Pacientes triados: %d\n",data->thread_number,data->stats->triaged_patients);
     pthread_exit(NULL);
 }
 
@@ -168,7 +188,7 @@ void *piperead(void *p){
         Queue *q = (Queue *) p;
         if (read(pipe_fd,str,sizeof(str)) > 0) {
             pat = getpatient(str);
-            if (strcmp(pat.name,TRIAGE))
+            if (strncmp(pat.name,TRIAGE,6))
                 enqueue(q,pat);
         }
     }
@@ -225,7 +245,7 @@ int empty_queue(Queue*queue) {
 }*/
 
 void temp_doctor() {
-    printf("Temporary doctor entering\n");
+    printf("Doutor temporario a entrar\n");
     Message *msg = malloc(sizeof(Message));
     int n_patients = 0;
     while(stats->triaged_patients - stats->attended_patients > 0.8 * mq_max){
@@ -235,13 +255,13 @@ void temp_doctor() {
         sem_post(sem);
         n_patients++;
     }
-    printf("Temporary doctor leaving. Patients attended: %d \n", n_patients);
+    printf("Doutor temporario a sair. Pacientes atendidos: %d \n", n_patients);
 }
 
 
 void doctor(){
     time_t time1 = time(NULL);
-    printf("I'm doctor %d, and I will begin my shift.\n",getpid());
+    printf("Doutor %d a iniciar o turno.\n",getpid());
     Message *msg = malloc(sizeof(Message));
     int n_patients = 0;
     while(time(NULL)-time1 < shift_length) {
@@ -254,5 +274,5 @@ void doctor(){
         sem_post(sem);
         n_patients++;
     }
-    printf("I'm doctor %d, and I will end my shift.\n Patients attended: %d \n",getpid(),n_patients);
+    printf("Doutor %d a terminar o turno.\nPacientes atendidos: %d \n",getpid(),n_patients);
 }
