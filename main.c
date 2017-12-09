@@ -2,7 +2,6 @@
 // Busca dados ao Config, threads e processos (com shift_lenght) funcionais.
 
 
-#include <errno.h>
 #include "structs.h"
 
 void handler(int );
@@ -33,33 +32,34 @@ int main() {
         exit(0);
     }
     //mapeamento das estatisticas
-    mem_id = shmget(IPC_PRIVATE,sizeof(Stats),IPC_CREAT | 0777);
-    stats = shmat(mem_id,NULL,0);
-    //mapeamento do semaforo
-    sem_id = shmget(IPC_PRIVATE,sizeof(sem_t),IPC_CREAT | 0777);
-    sem = shmat(sem_id,NULL,0);
-    //Criacao do pipe
-    if ((mkfifo(PIPE, O_CREAT | O_EXCL | 0600)<0) && (errno != EEXIST)){
-        printf("Cannot create pipe\n");
+    if (((mem_id = shmget(IPC_PRIVATE,sizeof(Stats),IPC_CREAT | 0600)) == -1) || ((stats = shmat(mem_id,NULL,0)) == (void *) -1)) {
+        perror("Nao abriu memoria partilhada");
         exit(0);
-    } else {
-        printf("Criou o Pipe/Pipe já existe\n");
     }
-    // Opens the pipe for reading
-    if ((pipe_fd = open(PIPE, O_RDWR | O_NONBLOCK )) < 0) {
-        printf("Nao e possivel ler do pipe\n");
+    //mapeamento do semaforo
+    if ((sem_id = shmget(IPC_PRIVATE,sizeof(sem_t),IPC_CREAT | 0600) == -1) || ((sem = shmat(sem_id,NULL,0)) == (void *) -1)) {
+        perror("Nao abriu semaforo");
         exit(0);
-    } else {
-        printf("Abriu pipe para leitura\n");
+    }
+    //Criacao do pipe
+    if (mkfifo(PIPE, O_CREAT | 0600) < 0){
+        perror("Cannot create pipe");
+        exit(0);
+    }
+    // Opens the pipe for reading/writing
+    if ((pipe_fd = open(PIPE, O_RDWR)) < 0) {
+        perror("Nao e possivel ler do pipe");
+        exit(0);
     }
     FILE *cfg = fopen("config.txt","r");    //ficheiro de configuracao
-    pthread_t pipe_reader;
     if (cfg) {
         getconfig(cfg);
-        printf("Abriu configuração\n");
-        sem_init(sem,1,1);
+        if (sem_init(sem,1,1) == -1) {
+            perror("Nao iniciou o semaforo");
+            exit(0);
+        }
+        pthread_t pipe_reader;
         pthread_create(&pipe_reader,NULL,piperead,(void *)queue);
-        printf("Criou semaforo e le o pipe\n");
         while (1) {
             Thread data[num_triage];
             pthread_t threads[num_triage];      //pool de threads
@@ -96,6 +96,7 @@ void handler(int signum){
         kill(0,signum);
         pthread_kill(pthread_self(),signum);                //Falta fechar IPC's
         destroy_queue(queue);
+        sem_destroy(sem);
         printf("Tudo eliminado! A sair...\n");              //MQ, pipe, MMF, etc...
         exit(0);
     }
@@ -245,14 +246,10 @@ void doctor(){
     int n_patients = 0;
     while(time(NULL)-time1 < shift_length) {
         sem_wait(sem);
-        if (msgrcv(mq_id,msg,sizeof(msg),-10,IPC_NOWAIT) == -1 && errno != ENOMSG) {
+        if (msgrcv(mq_id,msg,sizeof(Message) - sizeof(long),-10,IPC_NOWAIT) == -1 && errno != ENOMSG) {
             sem_post(sem);
             perror("Nao deu pra ler da message queue\n");
             exit(0);
-        } else if (errno == ENOMSG){
-            sem_post(sem);
-            printf("Nao ha pacientes\n");
-            sleep(1);
         }
         sem_post(sem);
         n_patients++;

@@ -19,6 +19,7 @@
 #include <signal.h>
 #include <fcntl.h>
 #include <semaphore.h>
+#include <errno.h>
 
 #define PIPE "input_pipe"
 #define LOG "urgency.log"
