@@ -26,7 +26,7 @@
 #define LOG "urgency.log"
 #define TRIAGE "TRIAGE"
 #define STR_SIZE 256
-#define LOG_SIZE 1024*1024
+#define LOG_SIZE (1024*1024*sizeof(char))
 
 //Variaveis Globais
 int num_doctors, num_triage, mq_max, shift_length;

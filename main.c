@@ -36,8 +36,7 @@ int main() {
         perror("Nao abriu memoria partilhada");
         exit(0);
     }
-    stats = shmat(mem_id,NULL,0);
-    if (!stats){
+    if ((stats = shmat(mem_id,NULL,0)) == (void *) -1){
         printf("Nao fez attach das estatisticas\n");
         exit(0);
     }
@@ -46,8 +45,7 @@ int main() {
         perror("Nao abriu semaforo");
         exit(0);
     }
-    sem = shmat(sem_id,NULL,0);
-    if (!sem){
+    if ((sem = shmat(sem_id,NULL,0)) == (void*) -1){
         printf("nao fez attach do semaforo\n");
         exit(0);
     }
@@ -64,6 +62,10 @@ int main() {
     //opens log file for reading/writing
     if ((log_fd = open(LOG,O_CREAT | O_RDWR, 0600)) == -1){
         perror("Nao e possivel abrir o log");
+        exit(0);
+    }
+    if ((log_map = mmap(NULL,LOG_SIZE,PROT_READ | PROT_WRITE,MAP_SHARED,log_fd,0)) == MAP_FAILED){
+        perror("Erro a mapear log file");
         exit(0);
     }
     //opens config file and reads it if successful
@@ -115,8 +117,8 @@ void handler(int signum){
         kill(0,signum);
         pthread_kill(pthread_self(),signum);                //Falta fechar IPC's
         destroy_queue(queue);
-        sem_destroy(sem);
         msgctl(mq_id,IPC_RMID,NULL);
+        sem_destroy(sem);
         shmdt(sem);
         shmdt(stats);
         close(pipe_fd);
