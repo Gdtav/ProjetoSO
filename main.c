@@ -27,12 +27,12 @@ int main() {
     queue = malloc(sizeof(Queue_node));
     create_queue(queue);
     //criacao message queue
-    if ((mq_id = msgget(IPC_PRIVATE, IPC_CREAT | 0777)) == -1) {
+    if ((mq_id = msgget(IPC_PRIVATE, IPC_CREAT | 0600)) == -1) {
         perror("Nao abriu message queue: ");
         exit(0);
     }
     //mapeamento das estatisticas
-    if ((mem_id = shmget(IPC_PRIVATE,sizeof(Stats),IPC_CREAT | 0600)) == -1{
+    if ((mem_id = shmget(IPC_PRIVATE,sizeof(Stats),IPC_CREAT | 0600)) == -1){
         perror("Nao abriu memoria partilhada");
         exit(0);
     }
@@ -169,14 +169,15 @@ void* triage(void *p){
                 pthread_mutex_unlock(&queue_mutex);
                 msg->patient = pat;
                 msg->m_type = pat.priority;
-                if (msgsnd(mq_id, msg, sizeof(Message), 0) == -1) {
+                if (msgsnd(mq_id, msg, sizeof(msg)-sizeof(long), 0) == -1) {
                     perror("Nao foi possivel enviar mensagem");
                     pthread_exit(NULL);
                 }
                 pthread_mutex_lock(&stats_mutex);
-                data->stats->triaged_patients++;
-                printf("patients triaged: %d\n", data->stats->triaged_patients);
+                stats->triaged_patients++;
+                printf("patients triaged: %d\n", stats->triaged_patients);
                 pthread_mutex_unlock(&stats_mutex);
+                usleep(msg->patient.triage_time*1000);
             } else {
                 pthread_mutex_unlock(&queue_mutex);
                 printf("Nao ha pacientes para enviar mensagem\n");
@@ -268,17 +269,28 @@ void temp_doctor() {
 void doctor(){
     time_t time1 = time(NULL);
     printf("Doutor %d a iniciar o turno.\n",getpid());
-    Message *msg = malloc(sizeof(Message));
+    Message *msg = (Message*)malloc(sizeof(Message));
     int n_patients = 0;
     while(time(NULL)-time1 < shift_length) {
         sem_wait(sem);
-        if (msgrcv(mq_id,msg,sizeof(Message) - sizeof(long),-10,IPC_NOWAIT) == -1 && errno != ENOMSG) {
+        if (msgrcv(mq_id,msg,sizeof(msg) - sizeof(long),1,0) == -1 && errno != ENOMSG) {
             sem_post(sem);
             perror("Nao deu pra ler da message queue\n");
             exit(0);
         }
-        sem_post(sem);
-        n_patients++;
+        else if(errno == ENOMSG) {
+            sem_post(sem);
+        }
+        else if(errno == EAGAIN){
+        	printf("Merda\n");
+        }
+        else{
+	       	printf("Hello\n");
+	        stats->attended_patients = stats->attended_patients +1;
+	        sem_post(sem);
+	        usleep(msg->patient.attendance_time*1000);
+        }
+        
     }
-    printf("Doutor %d a terminar o turno.\nPacientes atendidos: %d \n",getpid(),n_patients);
+    printf("Doutor %d a terminar o turno.\nPacientes atendidos: %d \n",getpid(),stats->attended_patients);
 }
