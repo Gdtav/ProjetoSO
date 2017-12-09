@@ -60,15 +60,14 @@ int main() {
     FILE *cfg = fopen("config.txt","r");    //ficheiro de configuracao
     if (cfg) {
         getconfig(cfg);
+        fclose(cfg);
         if (sem_init(sem,1,1) == -1) {
             perror("Nao iniciou o semaforo");
             exit(0);
         }
         pthread_t pipe_reader;
         pthread_create(&pipe_reader,NULL,piperead,(void *)queue);
-        while (1) {
-            signal(SIGUSR1,handler);
-            Thread data[num_triage];
+        Thread data[num_triage];
             pthread_t threads[num_triage];      //pool de threads
             for(i=0;i<num_triage;i++){
                 data[i].queue = queue;
@@ -76,6 +75,8 @@ int main() {
                 data[i].thread_number = i;
                 pthread_create(&threads[i],NULL,triage,(void *)&data[i]);
             }
+        while (1) {
+            signal(SIGUSR1,handler);
             //criacao dos processos doutor
             for (i = 0; i < num_doctors; ++i) {
                 new_doctor[i] = fork();
@@ -83,6 +84,7 @@ int main() {
                     doctor();
                     exit(0);
                 }
+                //chama um doutor temporario se a fila de mensagens ultrapassar o maximo
                 if(stats->triaged_patients - stats->attended_patients > mq_max)
                     temp_doctor();
             }
@@ -108,7 +110,7 @@ void handler(int signum){
         shmdt(sem);
         shmdt(stats);
         close(pipe_fd);
-        munmap();
+        //munmap();
         unlink(PIPE);
         printf("Tudo eliminado! A sair...\n");              //MQ, pipe, MMF, etc...
         exit(0);
@@ -158,27 +160,29 @@ void* triage(void *p){
     printf("Thread %d is starting!\n",data->thread_number);
     Patient pat;
     Message *msg = malloc(sizeof(Message));
-        pthread_mutex_lock(&queue_mutex);
-        if (!empty_queue(queue)) {
-            pat = dequeue(data->queue);
-            pthread_mutex_unlock(&queue_mutex);
-            msg->patient = pat;
-            msg->m_type = pat.priority;
-            if (msgsnd(mq_id, msg, sizeof(Message), 0) == -1) {
-                perror("Nao foi possivel enviar mensagem");
-                pthread_exit(NULL);
+        while (1){
+            pthread_mutex_lock(&queue_mutex);
+            if (!empty_queue(queue)) {
+                pat = dequeue(data->queue);
+                pthread_mutex_unlock(&queue_mutex);
+                msg->patient = pat;
+                msg->m_type = pat.priority;
+                if (msgsnd(mq_id, msg, sizeof(Message), 0) == -1) {
+                    perror("Nao foi possivel enviar mensagem");
+                    pthread_exit(NULL);
+                }
+                pthread_mutex_lock(&stats_mutex);
+                data->stats->triaged_patients++;
+                printf("patients triaged: %d\n", data->stats->triaged_patients);
+                pthread_mutex_unlock(&stats_mutex);
+            } else {
+                pthread_mutex_unlock(&queue_mutex);
+                printf("Nao ha pacientes para enviar mensagem\n");
+                sleep(1);
             }
-            pthread_mutex_lock(&stats_mutex);
-            data->stats->triaged_patients++;
-            printf("patients triaged: %d\n", data->stats->triaged_patients);
-            pthread_mutex_unlock(&stats_mutex);
-        } else {
-            pthread_mutex_unlock(&queue_mutex);
-            printf("Nao ha pacientes para enviar mensagem\n");
-            sleep(5);
         }
-    printf("Thread %d a sair! Pacientes triados: %d\n",data->thread_number,data->stats->triaged_patients);
-    pthread_exit(NULL);
+    //printf("Thread %d a sair! Pacientes triados: %d\n",data->thread_number,data->stats->triaged_patients);
+    //pthread_exit(NULL);
 }
 
 void *piperead(void *p){

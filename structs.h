@@ -33,7 +33,7 @@ int num_doctors, num_triage, mq_max, shift_length;
 int mem_id, mq_id, sem_id;
 int pipe_fd, log_fd;
 sem_t *sem;
-
+FILE *log_map;
 
 pthread_cond_t triage_threshold_cv = PTHREAD_COND_INITIALIZER;  //What's this for???
 pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
