@@ -22,6 +22,7 @@
 
 #define PIPE "input_pipe"
 #define LOG "urgency.log"
+#define TRIAGE "TRIAGE"
 #define STR_SIZE 256
 
 //Variaveis Globais
