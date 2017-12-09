@@ -37,12 +37,20 @@ int main() {
         exit(0);
     }
     stats = shmat(mem_id,NULL,0);
+    if (!stats){
+        printf("Nao fez attach das estatisticas\n");
+        exit(0);
+    }
     //mapeamento do semaforo
     if ((sem_id = shmget(IPC_PRIVATE,sizeof(sem_t),IPC_CREAT | 0600)) == -1){
         perror("Nao abriu semaforo");
         exit(0);
     }
     sem = shmat(sem_id,NULL,0);
+    if (!sem){
+        printf("nao fez attach do semaforo\n");
+        exit(0);
+    }
     //Criacao do pipe
     if (mkfifo(PIPE, O_CREAT | 0600) == -1){
         perror("Nao e possivel criar pipe");
