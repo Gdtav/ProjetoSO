@@ -1,6 +1,0 @@
-﻿Mapear Log File em memória
-colocar doutores a receber da message queue e processar os pacientes
-
-Duvidas:
-Escrever no log: sprintf ou write?
-Como processar tempos de triagem e atendimento? Sleep só serve com int em segundos...

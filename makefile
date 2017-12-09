@@ -1,5 +1,5 @@
 CC	= gcc
-OBJS	= main.o 
+OBJS	= main.o
 PROG	= urgency
 
 # GENERIC 
@@ -7,7 +7,7 @@ PROG	= urgency
 all:	${PROG}
 
 clean:
-	rm ${OBJS} ${PROG} input_pipe
+	rm ${OBJS} ${PROG}
 
 ${PROG}:	${OBJS}
 		${CC} -Wall -pthread ${OBJS} -o $@

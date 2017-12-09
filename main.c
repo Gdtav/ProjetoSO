@@ -32,22 +32,24 @@ int main() {
         exit(0);
     }
     //mapeamento das estatisticas
-    if (((mem_id = shmget(IPC_PRIVATE,sizeof(Stats),IPC_CREAT | 0600)) == -1) || ((stats = shmat(mem_id,NULL,0)) == (void *) -1)) {
+    if ((mem_id = shmget(IPC_PRIVATE,sizeof(Stats),IPC_CREAT | 0600)) == -1{
         perror("Nao abriu memoria partilhada");
         exit(0);
     }
+    stats = shmat(mem_id,NULL,0);
     //mapeamento do semaforo
-    if ((sem_id = shmget(IPC_PRIVATE,sizeof(sem_t),IPC_CREAT | 0600) == -1) || ((sem = shmat(sem_id,NULL,0)) == (void *) -1)) {
+    if ((sem_id = shmget(IPC_PRIVATE,sizeof(sem_t),IPC_CREAT | 0600)) == -1){
         perror("Nao abriu semaforo");
         exit(0);
     }
+    sem = shmat(sem_id,NULL,0);
     //Criacao do pipe
-    if (mkfifo(PIPE, O_CREAT | 0600) < 0){
+    if (mkfifo(PIPE, O_CREAT | 0600) == -1){
         perror("Nao e possivel criar pipe");
         exit(0);
     }
     // Opens the pipe for reading/writing
-    if ((pipe_fd = open(PIPE, O_RDWR)) < 0) {
+    if ((pipe_fd = open(PIPE, O_RDWR)) == -1) {
         perror("Nao e possivel ler do pipe");
         exit(0);
     }
