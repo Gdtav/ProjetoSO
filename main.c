@@ -283,20 +283,22 @@ void doctor(){
     int n_patients = 0;
     while(time(NULL)-time1 < shift_length) {
         sem_wait(sem);
-        if (msgrcv(mq_id,msg,sizeof(msg) - sizeof(long),1,0) == -1 && errno != ENOMSG) {
+        if (msgrcv(mq_id,msg,sizeof(msg) - sizeof(long),-10,IPC_NOWAIT) == -1 && errno != ENOMSG) {
             sem_post(sem);
             perror("Nao deu pra ler da message queue\n");
             exit(0);
         }
         else if(errno == ENOMSG) {
             sem_post(sem);
+            perror("Nao ha mensagem na message queue");
+            sleep(4);
         }
         else if(errno == EAGAIN){
-        	printf("Merda\n");
+        	perror("Fila cheia e IPC_NOWAIT selecionado");
         }
         else{
 	       	printf("Hello\n");
-	        stats->attended_patients = stats->attended_patients +1;
+	        stats->attended_patients = stats->attended_patients + 1;
 	        sem_post(sem);
 	        usleep(msg->patient.attendance_time*1000);
         }
