@@ -1,5 +1,6 @@
-//update a 29/10/2017, nome diferente para não apagar o que cá estava.
-// Busca dados ao Config, threads e processos (com shift_lenght) funcionais.
+//Fábio Cordeiro, 2016242575
+//Guilherme Tavares, 2016228357
+//Sistemas Operativos, 2017/2018
 
 
 #include "structs.h"

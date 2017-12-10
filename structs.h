@@ -1,6 +1,6 @@
-//
-// Created by guilherme on 5-11-2017.
-//
+//Fábio Cordeiro, 2016242575
+//Guilherme Tavares, 2016228357
+//Sistemas Operativos, 2017/2018
 
 #ifndef PROJETOSO_STRUCTS_H
 #define PROJETOSO_STRUCTS_H
@@ -36,7 +36,6 @@ sem_t *sstats;
 sem_t *slog;
 char *log_map;
 
-pthread_cond_t triage_threshold_cv = PTHREAD_COND_INITIALIZER;  //What's this for???
 pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t stats_mutex = PTHREAD_MUTEX_INITIALIZER;
 
