@@ -56,7 +56,7 @@ Stats *stats;
 //Paciente
 typedef struct patient{
     int arrival_number;
-    char name[50];
+    char *name;
     time_t arrival_time;
     float triage_time;
     float attendance_time;

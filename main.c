@@ -139,12 +139,12 @@ void handler(int signum){
 
 Patient getpatient(char str[STR_SIZE]){
     Patient pat;
-    sscanf(str,"%s %f %f %d",pat.name,&pat.triage_time,&pat.attendance_time,&pat.priority);
-    if(!strncmp(pat.name,TRIAGE,6)) {
-        num_triage = (int) pat.triage_time;
-    } else {
-        return pat;
-    }
+    pat.name = strtok(str," ");
+    pat.triage_time = strtof(strtok(NULL," "),NULL);
+    pat.attendance_time = strtof(strtok(NULL," "),NULL);
+    pat.priority = strtol(strtok(NULL," "),NULL,10);
+    pat.arrival_time = time(NULL);
+    return pat;
 }
 
 
@@ -201,12 +201,27 @@ void* triage(void *p){
 void *piperead(void *p){
     char str[STR_SIZE];
     Patient pat;
+    int group;
+    int i;
+    int g = 0;
+    Queue *q = (Queue *) p;
     while(1){
-        Queue *q = (Queue *) p;
-        if (read(pipe_fd,str,sizeof(str)) > 0) {
+        if (read(pipe_fd,str,sizeof(str)) > 0)
             pat = getpatient(str);
-            if (strncmp(pat.name,TRIAGE,6))
+        if ((group = strtol(pat.name,NULL,10)) > 0){
+            g++;
+            for (i = 0; i < group; i++){
+                sprintf(pat.name,"Grupo %d - Paciente %d",g,i);
+                printf(pat.name);
                 enqueue(q,pat);
+                printf("\nPaciente lido e inserido na queue\n");
+            }
+        } else if (!strcmp(pat.name,TRIAGE)) {
+            num_triage = pat.priority;
+            printf("Numero de triagens lido: %d\n",num_triage);
+        } else {
+            enqueue(q,pat);
+            printf("Paciente lido e inserido na queue\n");
         }
     }
 }
