@@ -17,7 +17,7 @@ Patient dequeue(Queue *);
 void destroy_queue (Queue *);
 int empty_queue(Queue *);
 //int full_queue (Queue *);
-void cria_estatisticas(Stats *);
+void calcula_estatisticas(Stats *);
 
 int main() {    
     sigset_t mask;
@@ -125,12 +125,12 @@ int main() {
                     exit(0);
                 }
                 //chama um doutor temporario se a fila de mensagens ultrapassar o maximo
-                printf("chegou ao if do tempoario\n");
-                printf("%d>%d",(stats->triaged_patients - stats->attended_patients),mq_max);
+                //printf("chegou ao if do tempoario\n");
+                //printf("%d>%d",(stats->triaged_patients - stats->attended_patients),mq_max);
                 sem_wait(sstats);
                 if(stats->triaged_patients - stats->attended_patients > mq_max){
                 	sem_post(sstats);
-                	printf("entrou temporario\n");
+                	printf("entrou doutor temporario\n");
                     temp_doctor();
                 }else{
                 	sem_post(sstats);
@@ -168,7 +168,7 @@ void handler(int signum){
         exit(0);
     }
     else if (signum == SIGUSR1){
-    	cria_estatisticas(stats);
+    	calcula_estatisticas(stats);
         printf("Pacientes triados: %d\n",stats->triaged_patients);
         printf("Pacientes atendidos: %d\n",stats->attended_patients);
         printf("Tempo médio de espera para triagem: %.2f\n",stats->mean_triage_wait);
@@ -262,7 +262,7 @@ void *piperead(void *p){
             g++;
             for (i = 1; i <= group; i++){
                 sprintf(pat.name,"Grupo %d - Paciente %d",g,i);
-                printf("%s\n", pat.name);
+                //printf("%s\n", pat.name);
                 enqueue(q,pat);
                 printf("Paciente %s lido e inserido na queue\n",pat.name);
             }
@@ -324,7 +324,7 @@ int empty_queue(Queue*queue) {
     return 0;
 }*/
 
-void cria_estatisticas(Stats *stats){
+void calcula_estatisticas(Stats *stats){
 	stats->mean_attendance_wait = (stats->total_attendance_wait)/stats->attended_patients;
 	stats->mean_triage_wait = (stats->total_triage_wait)/stats->triaged_patients;
 	stats->mean_total_time = (stats->total_triage_wait+stats->total_attendance_wait)/stats->attended_patients;
