@@ -61,7 +61,7 @@ int main() {
         exit(0);
     }
     //opens log file for reading/writing
-    if ((log_fd = open(LOG,O_CREAT | O_RDWR, 0600)) == -1){
+    if ((log_fd = open(LOG,O_CREAT | O_RDWR | O_SYNC, 0600)) == -1){
         perror("Nao e possivel abrir o log");
         exit(0);
     }
@@ -132,6 +132,7 @@ void handler(int signum){
         shmdt(sem);
         shmdt(stats);
         close(pipe_fd);
+        msync(log_map,LOG_SIZE,MS_SYNC);
         munmap(log_map,LOG_SIZE);
         close(log_fd);
         unlink(PIPE);
@@ -183,8 +184,10 @@ void getconfig(FILE* cfg){
 
 
 void* triage(void *p){
+	char str[STR_SIZE];
     Thread *data= (Thread *) p;
-    printf("Thread %d is starting!\n",data->thread_number);
+    sprintf(str,"Thread %d is starting!\n",data->thread_number);
+    strncat(log_map,str,strlen(str));
     Patient pat;
     Message msg;
     pthread_mutex_lock(&queue_mutex);
@@ -200,7 +203,8 @@ void* triage(void *p){
         pthread_mutex_lock(&stats_mutex);
         stats->triaged_patients++;
         stats->total_triage_wait += msg.patient.triage_time;
-        printf("Pacientes triados: %d\n", data->stats->triaged_patients);
+        sprintf(str,"Pacientes triados: %d\n", data->stats->triaged_patients);
+        strncat(log_map,str,strlen(str));
         pthread_mutex_unlock(&stats_mutex);
         usleep(msg.patient.triage_time*1000);
     } else {
@@ -208,7 +212,8 @@ void* triage(void *p){
         printf("Nao ha pacientes para enviar mensagem\n");
         sleep(1);
     }
-    printf("Thread %d a sair! Pacientes triados: %d\n",data->thread_number,data->stats->triaged_patients);
+    sprintf(str,"Thread %d a sair! Pacientes triados: %d\n",data->thread_number,data->stats->triaged_patients);
+    strncat(log_map,str,strlen(str));
     pthread_exit(NULL);
 }
 
@@ -225,17 +230,17 @@ void *piperead(void *p){
         if ((group = strtol(pat.name,NULL,10)) > 0){
             g++;
             for (i = 0; i < group; i++){
-                sprintf(pat.name,"Grupo %d - Paciente %d",g,i);
-                printf(pat.name);
+                //sprintf(pat.name,"Grupo %d - Paciente %d",g,i);
+                //printf(pat.name);
                 enqueue(q,pat);
-                printf("\nPaciente lido e inserido na queue\n");
+                //printf("\nPaciente lido e inserido na queue\n");
             }
         } else if (!strcmp(pat.name,TRIAGE)) {
             num_triage = pat.priority;
-            printf("Numero de triagens lido: %d\n",num_triage);
+            //printf("Numero de triagens lido: %d\n",num_triage);
         } else {
             enqueue(q,pat);
-            printf("Paciente lido e inserido na queue\n");
+            //printf("Paciente lido e inserido na queue\n");
         }
     }
 }
@@ -297,7 +302,9 @@ void cria_estatisticas(Stats *stats){
 }
 
 void temp_doctor() {
-    printf("Doutor temporario a entrar\n");
+	char str[STR_SIZE];
+    sprintf(str,"Doutor temporario a entrar\n");
+    strncat(log_map,str,strlen(str));
     Message *msg = malloc(sizeof(Message));
     while(stats->triaged_patients - stats->attended_patients > 0.8 * mq_max){
         sem_wait(sem);
@@ -307,13 +314,16 @@ void temp_doctor() {
         sem_post(sem);
         usleep(msg->patient.attendance_time * 1000);
     }
-    printf("Doutor temporario a sair. Pacientes atendidos: %d \n", stats->attended_patients);
+    sprintf(str,"Doutor temporario a sair. Pacientes atendidos: %d \n", stats->attended_patients);
+    strncat(log_map,str,strlen(str));
 }
 
 
 void doctor(){
     time_t time1 = time(NULL);
-    printf("Doutor %d a iniciar o turno.\n",getpid());
+    char str[STR_SIZE];
+    sprintf(str,"Doutor %d a iniciar o turno.\n",getpid());
+    strncat(log_map,str,strlen(str));
     Message msg;
     while(time(NULL)-time1 < shift_length) {
         sem_wait(sem);
@@ -332,7 +342,10 @@ void doctor(){
         	perror("Fila cheia e IPC_NOWAIT selecionado");
         }
         else{
-	       	printf("Atendeu o paciente %s de prioridade %d durante %f\n",msg.patient.name, msg.patient.priority,msg.patient.attendance_time);
+        	sprintf(str,"Retirou o paciente %s da queue\n",msg.patient.name);
+        	strncat(log_map,str,strlen(str));
+        	sprintf(str,"Atendeu o paciente %s durante %f\n",msg.patient.name,msg.patient.attendance_time);
+        	strncat(log_map,str,strlen(str));
 	        stats->attended_patients = stats->attended_patients + 1;
 	        stats->total_attendance_wait = stats->total_attendance_wait + msg.patient.attendance_time;
 	        sem_post(sem);
@@ -340,5 +353,6 @@ void doctor(){
         }
         
     }
-    printf("Doutor %d a terminar o turno.\nPacientes atendidos: %d \n",getpid(),stats->attended_patients);
+    sprintf(str,"Doutor %d a terminar o turno.\nPacientes atendidos: %d \n",getpid(),stats->attended_patients);
+    strncat(log_map,str,strlen(str));
 }
