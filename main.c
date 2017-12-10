@@ -291,14 +291,14 @@ void cria_estatisticas(Stats *stats){
 void temp_doctor() {
     printf("Doutor temporario a entrar\n");
     Message *msg = malloc(sizeof(Message));
-    int n_patients = 0;
     while(stats->triaged_patients - stats->attended_patients > 0.8 * mq_max){
         sem_wait(sem);
         msgrcv(mq_id,msg,sizeof(msg),-10,0);
-        stats->attended_patients++;
+    	stats->attended_patients = stats->attended_patients + 1;
+        stats->mean_attendance_wait += msg->patient.attendance_time;
         sem_post(sem);
     }
-    printf("Doutor temporario a sair. Pacientes atendidos: %d \n", n_patients);
+    printf("Doutor temporario a sair. Pacientes atendidos: %d \n", stats->attended_patients);
 }
 
 
