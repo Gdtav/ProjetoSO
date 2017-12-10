@@ -19,8 +19,14 @@ int empty_queue(Queue *);
 //int full_queue (Queue *);
 void cria_estatisticas(Stats *);
 
-int main() {
+int main() {    
+    sigset_t mask;
+	sigfillset(&mask);
+	sigdelset(&mask,SIGINT);
+	sigdelset(&mask,SIGUSR1);
+	pthread_sigmask(SIG_SETMASK, &mask, NULL);
     signal(SIGINT, handler);
+    signal(SIGUSR1,handler);	
 	//Inicializacao de variaveis e estruturas
     int i;
     pid_t new_doctor[num_doctors];
@@ -103,7 +109,6 @@ int main() {
         pthread_t pipe_reader;
         pthread_create(&pipe_reader,NULL,piperead,(void *)queue);
         while (1) {
-            signal(SIGUSR1,handler);
             Thread data[num_triage];
             pthread_t threads[num_triage];      //pool de threads
             for(i=0;i<num_triage;i++){
@@ -120,8 +125,16 @@ int main() {
                     exit(0);
                 }
                 //chama um doutor temporario se a fila de mensagens ultrapassar o maximo
-                if(stats->triaged_patients - stats->attended_patients > mq_max)
+                printf("chegou ao if do tempoario\n");
+                printf("%d>%d",(stats->triaged_patients - stats->attended_patients),mq_max);
+                sem_wait(sstats);
+                if(stats->triaged_patients - stats->attended_patients > mq_max){
+                	sem_post(sstats);
+                	printf("entrou temporario\n");
                     temp_doctor();
+                }else{
+                	sem_post(sstats);
+                }
             }
             for (i = 0; i < num_doctors; i++){
                 wait(NULL);
@@ -241,7 +254,11 @@ void *piperead(void *p){
     while(1){
         if (read(pipe_fd,str,sizeof(str)) > 0)
             pat = getpatient(str);
-        if ((group = strtol(pat.name,NULL,10)) > 0){
+        if (!strncmp(pat.name,TRIAGE,6)) {
+            num_triage = pat.priority;
+            printf("Numero de triagens lido: %d\n",num_triage);
+        } 
+        else if ((group = strtol(pat.name,NULL,10)) > 0){
             g++;
             for (i = 1; i <= group; i++){
                 sprintf(pat.name,"Grupo %d - Paciente %d",g,i);
@@ -249,10 +266,8 @@ void *piperead(void *p){
                 enqueue(q,pat);
                 printf("Paciente %s lido e inserido na queue\n",pat.name);
             }
-        } else if (!strcmp(pat.name,TRIAGE)) {
-            num_triage = pat.priority;
-            printf("Numero de triagens lido: %d\n",num_triage);
-        } else {
+        } 
+         else {
             enqueue(q,pat);
             printf("Paciente %s lido e inserido na queue\n",pat.name);
         }
