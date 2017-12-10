@@ -65,6 +65,15 @@ int main() {
         perror("Nao e possivel abrir o log");
         exit(0);
     }
+    if(lseek(log_fd,LOG_SIZE,SEEK_SET) < 0){
+        perror("Erro lseek");
+        exit(0);
+    }
+    if(write(log_fd,"",1) != 1){
+        perror("Nao e possivel escrever no log");
+        close(log_fd);
+        exit(0);
+    }
     if ((log_map = mmap(NULL,LOG_SIZE,PROT_READ | PROT_WRITE,MAP_SHARED,log_fd,0)) == MAP_FAILED){
         perror("Erro a mapear log file");
         exit(0);
@@ -123,7 +132,8 @@ void handler(int signum){
         shmdt(sem);
         shmdt(stats);
         close(pipe_fd);
-        //munmap();
+        munmap(log_map,LOG_SIZE);
+        close(log_fd);
         unlink(PIPE);
         printf("Tudo eliminado! A sair...\n");              //MQ, pipe, MMF, etc...
         exit(0);
