@@ -41,13 +41,22 @@ int main() {
         printf("Nao fez attach das estatisticas\n");
         exit(0);
     }
-    //mapeamento do semaforo
-    if ((sem_id = shmget(IPC_PRIVATE,sizeof(sem_t),IPC_CREAT | 0666)) == -1){
-        perror("Nao abriu semaforo");
+    //mapeamento do semaforo stats
+    if ((sstats_id = shmget(IPC_PRIVATE,sizeof(sem_t),IPC_CREAT | 0666)) == -1){
+        perror("Nao abriu semaforo 1");
         exit(0);
     }
-    if ((sem = shmat(sem_id,NULL,0)) == (void*) -1){
-        printf("nao fez attach do semaforo\n");
+    if ((sstats = shmat(sstats_id,NULL,0)) == (void*) -1){
+        printf("nao fez attach do semaforo 1\n");
+        exit(0);
+    }
+    //semaforo log
+    if ((slog_id = shmget(IPC_PRIVATE,sizeof(sem_t),IPC_CREAT | 0666)) == -1){
+        perror("Nao abriu semaforo 2");
+        exit(0);
+    }
+    if ((slog = shmat(slog_id,NULL,0)) == (void*) -1){
+        printf("nao fez attach do semaforo 2\n");
         exit(0);
     }
     //Criacao do pipe
@@ -61,7 +70,7 @@ int main() {
         exit(0);
     }
     //opens log file for reading/writing
-    if ((log_fd = open(LOG,O_CREAT | O_RDWR | O_SYNC, 0600)) == -1){
+    if ((log_fd = open(LOG,O_CREAT | O_RDWR | O_TRUNC, 0600)) == -1){
         perror("Nao e possivel abrir o log");
         exit(0);
     }
@@ -83,8 +92,12 @@ int main() {
     if (cfg) {
         getconfig(cfg);
         fclose(cfg);
-        if (sem_init(sem,1,1) == -1) {
-            perror("Nao iniciou o semaforo");
+        if (sem_init(sstats,1,1) == -1) {
+            perror("Nao iniciou o semaforo 1");
+            exit(0);
+        }
+        if (sem_init(slog,1,1) == -1) {
+            perror("Nao iniciou o semaforo 2");
             exit(0);
         }
         pthread_t pipe_reader;
@@ -128,8 +141,10 @@ void handler(int signum){
         pthread_kill(pthread_self(),signum);                //Falta fechar IPC's
         destroy_queue(queue);
         msgctl(mq_id,IPC_RMID,NULL);
-        sem_destroy(sem);
-        shmdt(sem);
+        sem_destroy(sstats);
+        shmdt(sstats);
+        sem_destroy(slog);
+        shmdt(slog);
         shmdt(stats);
         close(pipe_fd);
         msync(log_map,LOG_SIZE,MS_SYNC);
@@ -209,8 +224,7 @@ void* triage(void *p){
         usleep(msg.patient.triage_time*1000);
     } else {
         pthread_mutex_unlock(&queue_mutex);
-        printf("Nao ha pacientes para enviar mensagem\n");
-        sleep(1);
+        //printf("Nao ha pacientes para enviar mensagem\n");
     }
     sprintf(str,"Thread %d a sair! Pacientes triados: %d\n",data->thread_number,data->stats->triaged_patients);
     strncat(log_map,str,strlen(str));
@@ -229,18 +243,18 @@ void *piperead(void *p){
             pat = getpatient(str);
         if ((group = strtol(pat.name,NULL,10)) > 0){
             g++;
-            for (i = 0; i < group; i++){
-                //sprintf(pat.name,"Grupo %d - Paciente %d",g,i);
-                //printf(pat.name);
+            for (i = 1; i <= group; i++){
+                sprintf(pat.name,"Grupo %d - Paciente %d",g,i);
+                printf("%s\n", pat.name);
                 enqueue(q,pat);
-                //printf("\nPaciente lido e inserido na queue\n");
+                printf("Paciente %s lido e inserido na queue\n",pat.name);
             }
         } else if (!strcmp(pat.name,TRIAGE)) {
             num_triage = pat.priority;
-            //printf("Numero de triagens lido: %d\n",num_triage);
+            printf("Numero de triagens lido: %d\n",num_triage);
         } else {
             enqueue(q,pat);
-            //printf("Paciente lido e inserido na queue\n");
+            printf("Paciente %s lido e inserido na queue\n",pat.name);
         }
     }
 }
@@ -304,18 +318,26 @@ void cria_estatisticas(Stats *stats){
 void temp_doctor() {
 	char str[STR_SIZE];
     sprintf(str,"Doutor temporario a entrar\n");
+    sem_wait(slog);
     strncat(log_map,str,strlen(str));
-    Message *msg = malloc(sizeof(Message));
+    sem_post(slog);
+    Message msg;
+    sem_wait(sstats);
     while(stats->triaged_patients - stats->attended_patients > 0.8 * mq_max){
-        sem_wait(sem);
-        msgrcv(mq_id,msg,sizeof(msg) - sizeof(long),-10,0);
+        sem_post(sstats);
+        msgrcv(mq_id,&msg,sizeof(msg) - sizeof(long),-10,0);
+        sem_wait(sstats);
     	stats->attended_patients = stats->attended_patients + 1;
-        stats->mean_attendance_wait += msg->patient.attendance_time;
-        sem_post(sem);
-        usleep(msg->patient.attendance_time * 1000);
+        stats->mean_attendance_wait += msg.patient.attendance_time;
+        sem_post(sstats);
+        usleep(msg.patient.attendance_time * 1000);
     }
+    sem_wait(sstats);
     sprintf(str,"Doutor temporario a sair. Pacientes atendidos: %d \n", stats->attended_patients);
+    sem_post(sstats);
+    sem_wait(slog);
     strncat(log_map,str,strlen(str));
+    sem_post(slog);
 }
 
 
@@ -323,36 +345,42 @@ void doctor(){
     time_t time1 = time(NULL);
     char str[STR_SIZE];
     sprintf(str,"Doutor %d a iniciar o turno.\n",getpid());
+    sem_wait(slog);
     strncat(log_map,str,strlen(str));
+    sem_post(slog);
     Message msg;
     while(time(NULL)-time1 < shift_length) {
-        sem_wait(sem);
         if (msgrcv(mq_id,&msg,sizeof(msg) - sizeof(long),-10,IPC_NOWAIT) == -1 && errno != ENOMSG) {
-            sem_post(sem);
-            perror("Nao deu pra ler da message queue\n");
+            perror("Nao deu para ler da message queue\n");
             exit(0);
         }
         else if(errno == ENOMSG) {
-            sem_post(sem);
-            perror("Nao ha mensagem na message queue");
-            sleep(4);
+            ;
         }
         else if(errno == EAGAIN){
-            sem_post(sem);
         	perror("Fila cheia e IPC_NOWAIT selecionado");
         }
         else{
         	sprintf(str,"Retirou o paciente %s da queue\n",msg.patient.name);
+            sem_wait(slog);
         	strncat(log_map,str,strlen(str));
+            sem_post(slog);
         	sprintf(str,"Atendeu o paciente %s durante %f\n",msg.patient.name,msg.patient.attendance_time);
+            sem_wait(slog);
         	strncat(log_map,str,strlen(str));
+            sem_post(slog);
+            sem_wait(sstats);
 	        stats->attended_patients = stats->attended_patients + 1;
 	        stats->total_attendance_wait = stats->total_attendance_wait + msg.patient.attendance_time;
-	        sem_post(sem);
+            sem_post(sstats);
 	        usleep(msg.patient.attendance_time*1000);
         }
         
     }
+    sem_wait(sstats);
     sprintf(str,"Doutor %d a terminar o turno.\nPacientes atendidos: %d \n",getpid(),stats->attended_patients);
+    sem_post(sstats);
+    sem_wait(slog);
     strncat(log_map,str,strlen(str));
+    sem_post(slog);
 }
