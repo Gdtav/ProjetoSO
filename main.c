@@ -17,6 +17,7 @@ Patient dequeue(Queue *);
 void destroy_queue (Queue *);
 int empty_queue(Queue *);
 //int full_queue (Queue *);
+void cria_estatisticas(Stats *);
 
 int main() {
     signal(SIGINT, handler);
@@ -128,11 +129,15 @@ void handler(int signum){
         exit(0);
     }
     else if (signum == SIGUSR1){
+    	cria_estatisticas(stats);
         printf("Pacientes triados: %d\n",stats->triaged_patients);
         printf("Pacientes atendidos: %d\n",stats->attended_patients);
         printf("Tempo médio de espera para triagem: %.2f\n",stats->mean_triage_wait);
         printf("Tempo médio de espera pelo atendimento: %.2f\n",stats->mean_attendance_wait);
         printf("Tempo medio gasto no sistema: %.2f\n", stats->mean_total_time);
+        printf("Tempo total de espera para triagem: %.2f\n",stats->total_triage_wait);
+        printf("Tempo total de espera pelo atendimento: %.2f\n",stats->total_attendance_wait);
+        printf("Tempo total gasto no sistema: %.2f\n", (stats->total_triage_wait+stats->total_attendance_wait));
     }
 }
 
@@ -185,6 +190,7 @@ void* triage(void *p){
                 }
                 pthread_mutex_lock(&stats_mutex);
                 stats->triaged_patients++;
+                stats->total_triage_wait += msg->patient.triage_time;
                 printf("patients triaged: %d\n", stats->triaged_patients);
                 pthread_mutex_unlock(&stats_mutex);
                 usleep(msg->patient.triage_time*1000);
@@ -261,6 +267,12 @@ int empty_queue(Queue*queue) {
     return 0;
 }*/
 
+void cria_estatisticas(Stats *stats){
+	stats->mean_attendance_wait = (stats->total_attendance_wait)/stats->attended_patients;
+	stats->mean_triage_wait = (stats->total_triage_wait)/stats->triaged_patients;
+	stats->mean_total_time = (stats->total_triage_wait+stats->total_attendance_wait)/stats->attended_patients;
+}
+
 void temp_doctor() {
     printf("Doutor temporario a entrar\n");
     Message *msg = malloc(sizeof(Message));
@@ -270,7 +282,6 @@ void temp_doctor() {
         msgrcv(mq_id,msg,sizeof(msg),-10,0);
         stats->attended_patients++;
         sem_post(sem);
-        n_patients++;
     }
     printf("Doutor temporario a sair. Pacientes atendidos: %d \n", n_patients);
 }
@@ -280,10 +291,9 @@ void doctor(){
     time_t time1 = time(NULL);
     printf("Doutor %d a iniciar o turno.\n",getpid());
     Message *msg = (Message*)malloc(sizeof(Message));
-    int n_patients = 0;
     while(time(NULL)-time1 < shift_length) {
         sem_wait(sem);
-        if (msgrcv(mq_id,msg,sizeof(msg) - sizeof(long),-10,IPC_NOWAIT) == -1 && errno != ENOMSG) {
+        if (msgrcv(mq_id,msg,sizeof(msg) - sizeof(long),-10,0) == -1 && errno != ENOMSG) {
             sem_post(sem);
             perror("Nao deu pra ler da message queue\n");
             exit(0);
@@ -297,8 +307,9 @@ void doctor(){
         	perror("Fila cheia e IPC_NOWAIT selecionado");
         }
         else{
-	       	printf("Hello\n");
+	       	printf("Atendeu\n");
 	        stats->attended_patients = stats->attended_patients + 1;
+	        stats->mean_attendance_wait += msg->patient.attendance_time;
 	        sem_post(sem);
 	        usleep(msg->patient.attendance_time*1000);
         }
