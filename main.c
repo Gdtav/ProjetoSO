@@ -28,12 +28,12 @@ int main() {
     queue = malloc(sizeof(Queue_node));
     create_queue(queue);
     //criacao message queue
-    if ((mq_id = msgget(IPC_PRIVATE, IPC_CREAT | 0600)) == -1) {
+    if ((mq_id = msgget(IPC_PRIVATE, IPC_CREAT | 0666)) == -1) {
         perror("Nao abriu message queue: ");
         exit(0);
     }
     //mapeamento das estatisticas
-    if ((mem_id = shmget(IPC_PRIVATE,sizeof(Stats),IPC_CREAT | 0600)) == -1){
+    if ((mem_id = shmget(IPC_PRIVATE,sizeof(Stats),IPC_CREAT | 0666)) == -1){
         perror("Nao abriu memoria partilhada");
         exit(0);
     }
@@ -42,7 +42,7 @@ int main() {
         exit(0);
     }
     //mapeamento do semaforo
-    if ((sem_id = shmget(IPC_PRIVATE,sizeof(sem_t),IPC_CREAT | 0600)) == -1){
+    if ((sem_id = shmget(IPC_PRIVATE,sizeof(sem_t),IPC_CREAT | 0666)) == -1){
         perror("Nao abriu semaforo");
         exit(0);
     }
@@ -80,7 +80,9 @@ int main() {
         }
         pthread_t pipe_reader;
         pthread_create(&pipe_reader,NULL,piperead,(void *)queue);
-        Thread data[num_triage];
+        while (1) {
+            signal(SIGUSR1,handler);
+            Thread data[num_triage];
             pthread_t threads[num_triage];      //pool de threads
             for(i=0;i<num_triage;i++){
                 data[i].queue = queue;
@@ -88,8 +90,6 @@ int main() {
                 data[i].thread_number = i;
                 pthread_create(&threads[i],NULL,triage,(void *)&data[i]);
             }
-        while (1) {
-            signal(SIGUSR1,handler);
             //criacao dos processos doutor
             for (i = 0; i < num_doctors; ++i) {
                 new_doctor[i] = fork();
@@ -101,7 +101,7 @@ int main() {
                 if(stats->triaged_patients - stats->attended_patients > mq_max)
                     temp_doctor();
             }
-            for (i = 0; i < num_doctors; ++i) {
+            for (i = 0; i < num_doctors; i++){
                 wait(NULL);
             }
         }
@@ -176,32 +176,30 @@ void* triage(void *p){
     Thread *data= (Thread *) p;
     printf("Thread %d is starting!\n",data->thread_number);
     Patient pat;
-    Message *msg = malloc(sizeof(Message));
-        while (1){
-            pthread_mutex_lock(&queue_mutex);
-            if (!empty_queue(queue)) {
-                pat = dequeue(data->queue);
-                pthread_mutex_unlock(&queue_mutex);
-                msg->patient = pat;
-                msg->m_type = pat.priority;
-                if (msgsnd(mq_id, msg, sizeof(msg)-sizeof(long), 0) == -1) {
-                    perror("Nao foi possivel enviar mensagem");
-                    pthread_exit(NULL);
-                }
-                pthread_mutex_lock(&stats_mutex);
-                stats->triaged_patients++;
-                stats->total_triage_wait += msg->patient.triage_time;
-                printf("patients triaged: %d\n", stats->triaged_patients);
-                pthread_mutex_unlock(&stats_mutex);
-                usleep(msg->patient.triage_time*1000);
-            } else {
-                pthread_mutex_unlock(&queue_mutex);
-                printf("Nao ha pacientes para enviar mensagem\n");
-                sleep(1);
-            }
+    Message msg;
+    pthread_mutex_lock(&queue_mutex);
+    if (!empty_queue(queue)) {
+        pat = dequeue(data->queue);
+        pthread_mutex_unlock(&queue_mutex);
+        msg.patient = pat;
+        msg.m_type = pat.priority;
+        if (msgsnd(mq_id, &msg, sizeof(msg)-sizeof(long), 0) == -1) {
+            perror("Nao foi possivel enviar mensagem");
+            pthread_exit(NULL);
         }
-    //printf("Thread %d a sair! Pacientes triados: %d\n",data->thread_number,data->stats->triaged_patients);
-    //pthread_exit(NULL);
+        pthread_mutex_lock(&stats_mutex);
+        stats->triaged_patients++;
+        stats->total_triage_wait += msg.patient.triage_time;
+        printf("Pacientes triados: %d\n", data->stats->triaged_patients);
+        pthread_mutex_unlock(&stats_mutex);
+        usleep(msg.patient.triage_time*1000);
+    } else {
+        pthread_mutex_unlock(&queue_mutex);
+        printf("Nao ha pacientes para enviar mensagem\n");
+        sleep(1);
+    }
+    printf("Thread %d a sair! Pacientes triados: %d\n",data->thread_number,data->stats->triaged_patients);
+    pthread_exit(NULL);
 }
 
 void *piperead(void *p){
@@ -293,10 +291,11 @@ void temp_doctor() {
     Message *msg = malloc(sizeof(Message));
     while(stats->triaged_patients - stats->attended_patients > 0.8 * mq_max){
         sem_wait(sem);
-        msgrcv(mq_id,msg,sizeof(msg),-10,0);
+        msgrcv(mq_id,msg,sizeof(msg) - sizeof(long),-10,0);
     	stats->attended_patients = stats->attended_patients + 1;
         stats->mean_attendance_wait += msg->patient.attendance_time;
         sem_post(sem);
+        usleep(msg->patient.attendance_time * 1000);
     }
     printf("Doutor temporario a sair. Pacientes atendidos: %d \n", stats->attended_patients);
 }
@@ -305,10 +304,10 @@ void temp_doctor() {
 void doctor(){
     time_t time1 = time(NULL);
     printf("Doutor %d a iniciar o turno.\n",getpid());
-    Message *msg = (Message*)malloc(sizeof(Message));
+    Message msg;
     while(time(NULL)-time1 < shift_length) {
         sem_wait(sem);
-        if (msgrcv(mq_id,msg,sizeof(msg) - sizeof(long),-10,0) == -1 && errno != ENOMSG) {
+        if (msgrcv(mq_id,&msg,sizeof(msg) - sizeof(long),-10,IPC_NOWAIT) == -1 && errno != ENOMSG) {
             sem_post(sem);
             perror("Nao deu pra ler da message queue\n");
             exit(0);
@@ -319,14 +318,15 @@ void doctor(){
             sleep(4);
         }
         else if(errno == EAGAIN){
+            sem_post(sem);
         	perror("Fila cheia e IPC_NOWAIT selecionado");
         }
         else{
-	       	printf("Atendeu\n");
+	       	printf("Atendeu o paciente %s de prioridade %d durante %f\n",msg.patient.name, msg.patient.priority,msg.patient.attendance_time);
 	        stats->attended_patients = stats->attended_patients + 1;
-	        stats->mean_attendance_wait += msg->patient.attendance_time;
+	        stats->total_attendance_wait = stats->total_attendance_wait + msg.patient.attendance_time;
 	        sem_post(sem);
-	        usleep(msg->patient.attendance_time*1000);
+	        usleep(msg.patient.attendance_time*1000);
         }
         
     }
